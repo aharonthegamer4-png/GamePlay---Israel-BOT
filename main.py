@@ -33,7 +33,7 @@ ROLE_APPROVAL_LOG_CHANNEL_ID = 1521554909021868073
 TICKET_PANEL_CHANNEL_ID = 1521555870268260423
 TICKET_LOG_CHANNEL_ID = 1521557178387795999
 ROLE_GIVEN_LOG_CHANNEL_ID = 1521575503448768683 
-SERVER_AUDIT_LOG_CHANNEL_ID = 1521596321721487491 # 🎯 חדר לוגי האבטחה החדש שביקשת!
+SERVER_AUDIT_LOG_CHANNEL_ID = 1521596321721487491 # חדר לוגי אבטחה אוטומטיים
 
 # משתנה גלובלי לשמירת מצב הלולאה (0 = שחקנים, 1 = סטטוס אונליין/אופליין)
 status_cycle = 0
@@ -78,6 +78,7 @@ async def on_member_join(member: discord.Member):
     if member.avatar:
         embed.set_thumbnail(url=member.avatar.url)
         
+    embed.set_thumbnail(url=member.avatar.url if member.avatar else member.default_avatar.url)
     embed.set_footer(text="Developed by Aharon the gamer", icon_url=member.guild.icon.url if member.guild.icon else None)
 
     if os.path.exists(BACKGROUND_IMAGE):
@@ -99,8 +100,7 @@ async def on_member_remove(member: discord.Member):
         description=f"המשתמש **{member.name}** ({member.mention}) עזב את שרת המשטרה ברגע זה.\n\n**מזהה משתמש:** `{member.id}`",
         color=discord.Color.red()
     )
-    if member.avatar:
-        embed.set_thumbnail(url=member.avatar.url)
+    embed.set_thumbnail(url=member.avatar.url if member.avatar else member.default_avatar.url)
     embed.set_footer(text="Developed by Aharon the gamer")
     
     if os.path.exists(BACKGROUND_IMAGE):
@@ -162,7 +162,7 @@ class RoleRequestModal(discord.ui.Modal, title="טופס הגשת בקשת רו�
         else:
             await log_channel.send(embed=embed, view=view)
             
-        await interaction.followup.send("✅ הטופס נשלח בהצלחה לחדר אישורי ההנהלה! אנא המתן לאישור הבקשה.", ephemeral=True)
+        await interaction.followup.send("✅ הטופס נשלח בהצלחה לחדר אישורי ההנהלה! אנו המתן לאישור הבקשה.", ephemeral=True)
 class DynamicRoleSelect(discord.ui.Select):
     def __init__(self, target_user_id: int):
         self.target_user_id = target_user_id
@@ -218,7 +218,7 @@ class DynamicRoleSelect(discord.ui.Select):
                 title="🎖️ לוג רשמי - הענקת דרגות ורולים",
                 description=(
                     f"**Action:** הענקת רולים ודרגות 🎖️\n"
-                    f"**המנהל המאשר:** {interaction.user.mention} (`{interaction.user.id}`)\n"
+                    f"**האתר המאשר:** {interaction.user.mention} (`{interaction.user.id}`)\n"
                     f"**המשתמש שקיבל:** {target.mention} (`{target.id}`)\n\n"
                     f"**הרולים שהוענקו בהצלחה:**\n```{roles_list}```"
                 ),
@@ -261,155 +261,7 @@ class DynamicRoleSelect(discord.ui.Select):
             if len(options) == 25:
                 break
         self.options = options
-class RoleApprovalView(discord.ui.View):
-    def __init__(self, target_user_id: int):
-        super().__init__(timeout=None)
-        self.target_user_id = target_user_id
-        self.add_item(DynamicRoleSelect(target_user_id))
 
-    async def interaction_check(self, interaction: discord.Interaction) -> bool:
-        if ROLE_APPROVER_ID not in [role.id for role in interaction.user.roles]:
-            await interaction.response.send_message("❌ אין לך את ההרשאות הדרושות לביצוע פעולות בפנל זה.", ephemeral=True)
-            return False
-        return True
-
-    @discord.ui.button(label="ענישה: BAN", style=discord.ButtonStyle.danger, emoji="🔨", custom_id="admin_action_ban")
-    async def ban_user(self, interaction: discord.Interaction, button: discord.ui.Button):
-        guild = interaction.guild
-        target = guild.get_member(self.target_user_id)
-        if not target:
-            return await interaction.response.send_message("המשתמש כבר לא נמצא בשרת.", ephemeral=True)
-        
-        try:
-            try:
-                dm_ban = discord.Embed(
-                    title="🚨 עדכון מחלקת המשטרה | בקשתך נדחתה ❌",
-                    description=(
-                        f"שלום {target.name},\n"
-                        f"אנא שים לב כי טופס בקשת הדרגות שלך בשרת **GamePlay IL** נדחה על ידי ההנהלה העליונה.\n"
-                        f"עקב כך, הוחלט להרחיק אותך לצמידות ממערכות השרת (BAN). 🔨"
-                    ),
-                    color=discord.Color.red()
-                )
-                dm_ban.set_footer(text="Developed by Aharon the gamer")
-                await target.send(embed=dm_ban)
-            except Exception: pass
-
-            await target.ban(reason="נדחה בטופס הדרגות וקיבל הרחקה מההנהלה העליונה.")
-            
-            old_embed = interaction.message.embeds if interaction.message.embeds else None
-            locked_embed = discord.Embed(
-                title="🔒 פניית בקשת רולים נדחתה וננעלה",
-                description=old_embed.description if old_embed else "טופס בקשת דרגות",
-                color=discord.Color.red()
-            )
-            if os.path.exists(BACKGROUND_IMAGE): locked_embed.set_image(url="attachment://background.png")
-            locked_embed.add_field(name="🛡️ סטטוס מערכת", value="❌ המשתמש נדחה, נחסם מהשרת (BAN) ופנל השליטה הושבת.", inline=False)
-            locked_embed.set_footer(text="Developed by Aharon the gamer")
-            await interaction.message.edit(embed=locked_embed, view=None)
-
-            log_channel = guild.get_channel(ROLE_GIVEN_LOG_CHANNEL_ID)
-            if log_channel:
-                ban_embed = discord.Embed(
-                    title="🔨 לוג רשמי - חסימת משתמש מטופס דרגות",
-                    description=(
-                        f"**Action:** דחיית טופס וחסימה מהשרת (BAN) 🔨\n"
-                        f"**המנהל המעניש:** {interaction.user.mention} (`{interaction.user.id}`)\n"
-                        f"**המשתמש שנחסם:** {target.mention} (`{target.id}`)\n"
-                    ),
-                    color=discord.Color.red()
-                )
-                ban_embed.set_footer(text="Developed by Aharon the gamer")
-                if os.path.exists(BACKGROUND_IMAGE):
-                    ban_embed.set_image(url="attachment://background.png")
-                    await log_channel.send(file=discord.File(BACKGROUND_IMAGE, filename="background.png"), embed=ban_embed)
-                else:
-                    await log_channel.send(embed=ban_embed)
-
-            await interaction.response.send_message(f"🔨 המשתמש {target.name} נחסם בהצלחה והפנל ננעל.", ephemeral=True)
-        except discord.Forbidden:
-            await interaction.response.send_message("❌ שגיאה: לבוט אין הרשאה לחסום משתמש זה.", ephemeral=True)
-
-    @discord.ui.button(label="ענישה: KICK", style=discord.ButtonStyle.secondary, emoji="🚪", custom_id="admin_action_kick")
-    async def kick_user(self, interaction: discord.Interaction, button: discord.ui.Button):
-        guild = interaction.guild
-        target = guild.get_member(self.target_user_id)
-        if not target:
-            return await interaction.response.send_message("המשתמש כבר לא נמצא בשרת.", ephemeral=True)
-        
-        try:
-            try:
-                dm_kick = discord.Embed(
-                    title="🚨 עדכון מחלקת המשטרה | בקשתך נדחתה ❌",
-                    description=(
-                        f"שלום {target.name},\n"
-                        f"אנא שים לב כי טופס בקשת הדרגות שלך בשרת **GamePlay IL** נדחה על ידי ההנהלה העליונה.\n"
-                        f"עקב כך, הוחלט לנתק אותך ממערכות השרת הנוכחיות (KICK). 🚪"
-                    ),
-                    color=discord.Color.orange()
-                )
-                dm_kick.set_footer(text="Developed by Aharon the gamer")
-                await target.send(embed=dm_kick)
-            except Exception: pass
-
-            await target.kick(reason="נדחה בטופס הדרגות ונזרק מהשרת.")
-            
-            old_embed = interaction.message.embeds if interaction.message.embeds else None
-            locked_embed = discord.Embed(
-                title="🔒 פניית בקשת רולים נדחתה וננעלה",
-                description=old_embed.description if old_embed else "טופס בקשת דרגות",
-                color=discord.Color.orange()
-            )
-            if os.path.exists(BACKGROUND_IMAGE): locked_embed.set_image(url="attachment://background.png")
-            locked_embed.add_field(name="🛡️ סטטוס מערכת", value="🚪 המשתמש נדחה, נזרק מהשרת (KICK) ופנל השליטה הושבת.", inline=False)
-            locked_embed.set_footer(text="Developed by Aharon the gamer")
-            await interaction.message.edit(embed=locked_embed, view=None)
-
-            log_channel = guild.get_channel(ROLE_GIVEN_LOG_CHANNEL_ID)
-            if log_channel:
-                kick_embed = discord.Embed(
-                    title="🚪 לוג רשמי - קיק למשתמש מטופס דרגות",
-                    description=(
-                        f"**Action:** דחיית טופס וקיק מהשרת (KICK) 🚪\n"
-                        f"**המנהל המעניש:** {interaction.user.mention} (`{interaction.user.id}`)\n"
-                        f"**המשתמש שנזרק:** {target.mention} (`{target.id}`)\n"
-                    ),
-                    color=discord.Color.orange()
-                )
-                kick_embed.set_footer(text="Developed by Aharon the gamer")
-                if os.path.exists(BACKGROUND_IMAGE):
-                    kick_embed.set_image(url="attachment://background.png")
-                    await log_channel.send(file=discord.File(BACKGROUND_IMAGE, filename="background.png"), embed=kick_embed)
-                else:
-                    await log_channel.send(embed=kick_embed)
-
-            await interaction.response.send_message(f"🚪 המשתמש {target.name} נזרק בהצלחה והפנל ננעל.", ephemeral=True)
-        except discord.Forbidden:
-            await interaction.response.send_message("❌ שגיאה: לבוט אין הרשאה לזרוק משתמש זה.", ephemeral=True)
-
-    @discord.ui.button(label="סיום פנייה ונתינת רולים", style=discord.ButtonStyle.success, emoji="✅", custom_id="admin_action_finish")
-    async def finish_request(self, interaction: discord.Interaction, button: discord.ui.Button):
-        old_embed = interaction.message.embeds if interaction.message.embeds else None
-        locked_embed = discord.Embed(
-            title="🔒 פניית בקשת רולים נסגרה ידנית",
-            description=old_embed.description if old_embed else "טופס בקשת דרגות",
-            color=discord.Color.green()
-        )
-        if os.path.exists(BACKGROUND_IMAGE): locked_embed.set_image(url="attachment://background.png")
-        locked_embed.add_field(name="🛡️ סטטוס פנייה", value=f"✅ נסגר ידנית על ידי {interaction.user.mention}!", inline=False)
-        locked_embed.set_footer(text="Developed by Aharon the gamer")
-        
-        await interaction.message.edit(embed=locked_embed, view=None)
-        await interaction.response.send_message("✅ הפנייה נסגרה ותפריט השליטה הוסר מהערוץ!", ephemeral=True)
-        self.stop()
-
-class RoleRequestStarterView(discord.ui.View):
-    def __init__(self):
-        super().__init__(timeout=None)
-
-    @discord.ui.button(label="להגשת בקשת רולים ודרגות", style=discord.ButtonStyle.primary, emoji="🎖️", custom_id="start_role_req_btn")
-    async def start_request(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await interaction.response.send_modal(RoleRequestModal())
 class TicketActionButtons(discord.ui.View):
     def __init__(self, creator_id: int):
         super().__init__(timeout=None)
@@ -451,7 +303,7 @@ class TicketActionButtons(discord.ui.View):
             target_user = None
             
             if msg.mentions:
-                target_user = msg.mentions[0]
+                target_user = msg.mentions
             else:
                 match = re.search(r'\d+', msg.content)
                 if match:
@@ -513,7 +365,7 @@ class TicketDropdown(discord.ui.Select):
 
     async def callback(self, interaction: discord.Interaction):
         guild = interaction.guild
-        ticket_type = self.values[0]
+        ticket_type = self.values
         
         overwrites = {guild.default_role: discord.PermissionOverwrite(view_channel=False), interaction.user: discord.PermissionOverwrite(view_channel=True, send_messages=True, attach_files=True)}
         staff_role = guild.get_role(STAFF_TICKET_ROLE_ID)
@@ -616,7 +468,7 @@ async def track_fivem_status():
     await bot.change_presence(activity=discord.Activity(type=discord.ActivityType.watching, name=status_text))
 
 # ==========================================
-# 🛡️ מערכת לוגי אבטחה מתקדמת לרולים בשרת (AUDIT LOGS EVENTS)
+# 🛡️ מערכת לוגי אבטחה משוכללת מבוססת יומן המערכת (AUDIT LOGS EVENTS)
 # ==========================================
 @bot.event
 async def on_member_update(before: discord.Member, after: discord.Member):
@@ -624,19 +476,38 @@ async def on_member_update(before: discord.Member, after: discord.Member):
     log_channel = before.guild.get_channel(SERVER_AUDIT_LOG_CHANNEL_ID)
     if not log_channel: return
 
-    # בדיקה האם רול כלשהו נוסף למשתמש
+    # בדיקה האם רול נוסף
     if len(before.roles) < len(after.roles):
         new_role = next(role for role in after.roles if role not in before.roles)
-        embed = discord.Embed(title="🟢 רול הוענק למשתמש", description=f"למשתמש {after.mention} הוענק רול חדש במערכת.\n\n**הרול שהוענק:** {new_role.mention}\n**מזהה רול:** `{new_role.id}`", color=discord.Color.green())
+        
+        # פנייה ליומן המערכת כדי למשוך את המנהל שביצע את הפעולה
+        responsible_user = "מערכת דיסקורד / בוט"
+        try:
+            async for entry in before.guild.audit_logs(limit=1, action=discord.AuditLogAction.member_role_update):
+                if entry.target.id == after.id:
+                    responsible_user = entry.user.mention
+                    break
+        except Exception: pass
+
+        embed = discord.Embed(title="🟢 רול הוענק למשתמש", description=f"**המשתמש שקיבל:** {after.mention} (`{after.id}`)\n**המנהל המעניק:** {responsible_user}\n\n**הרול שהוענק:** {new_role.mention}\n**מזהה רול:** `{new_role.id}`", color=discord.Color.green())
         embed.set_footer(text="Developed by Aharon the gamer")
         if os.path.exists(BACKGROUND_IMAGE):
             await log_channel.send(file=discord.File(BACKGROUND_IMAGE, filename="background.png"), embed=embed)
         else: await log_channel.send(embed=embed)
 
-    # בדיקה האם רול כלשהו הוסר מהמשתמש
+    # בדיקה האם רול הוסר
     elif len(before.roles) > len(after.roles):
         removed_role = next(role for role in before.roles if role not in after.roles)
-        embed = discord.Embed(title="🔴 רול הוסר ממשתמש", description=f"למשתמש {after.mention} הוסר רול מהפרופיל.\n\n**הרול שהוסר:** {removed_role.mention}\n**מזהה רול:** `{removed_role.id}`", color=discord.Color.red())
+        
+        responsible_user = "מערכת דיסקורד / בוט"
+        try:
+            async for entry in before.guild.audit_logs(limit=1, action=discord.AuditLogAction.member_role_update):
+                if entry.target.id == after.id:
+                    responsible_user = entry.user.mention
+                    break
+        except Exception: pass
+
+        embed = discord.Embed(title="🔴 רול הוסר ממשתמש", description=f"**המשתמש שהוסר ממנו:** {after.mention} (`{after.id}`)\n**המנהל המסיר:** {responsible_user}\n\n**הרול שהוסר:** {removed_role.mention}\n**מזהה רול:** `{removed_role.id}`", color=discord.Color.red())
         embed.set_footer(text="Developed by Aharon the gamer")
         if os.path.exists(BACKGROUND_IMAGE):
             await log_channel.send(file=discord.File(BACKGROUND_IMAGE, filename="background.png"), embed=embed)
@@ -648,7 +519,14 @@ async def on_guild_role_create(role: discord.Role):
     log_channel = role.guild.get_channel(SERVER_AUDIT_LOG_CHANNEL_ID)
     if not log_channel: return
 
-    embed = discord.Embed(title="✨ רול חדש נוצר בשרת", description=f"נוצר רול חדש לחלוטין בהגדרות השרת.\n\n**שם הרול:** `{role.name}`\n**מזהה רול:** `{role.id}`", color=discord.Color.blue())
+    responsible_user = "מנהל שרת"
+    try:
+        async for entry in role.guild.audit_logs(limit=1, action=discord.AuditLogAction.role_create):
+            responsible_user = entry.user.mention
+            break
+    except Exception: pass
+
+    embed = discord.Embed(title="✨ רול חדש נוצר בשרת", description=f"**נוצר על ידי:** {responsible_user}\n\n**שם הרול:** `{role.name}`\n**מזהה רול:** `{role.id}`", color=discord.Color.blue())
     embed.set_footer(text="Developed by Aharon the gamer")
     if os.path.exists(BACKGROUND_IMAGE):
         await log_channel.send(file=discord.File(BACKGROUND_IMAGE, filename="background.png"), embed=embed)
@@ -660,7 +538,14 @@ async def on_guild_role_delete(role: discord.Role):
     log_channel = role.guild.get_channel(SERVER_AUDIT_LOG_CHANNEL_ID)
     if not log_channel: return
 
-    embed = discord.Embed(title="🗑️ רול נמחק מהשרת", description=f"רול קיים נמחק לחלוטין מהגדרות השרת.\n\n**שם הרול שנמחק:** `{role.name}`\n**מזהה רול:** `{role.id}`", color=discord.Color.dark_red())
+    responsible_user = "מנהל שרת"
+    try:
+        async for entry in role.guild.audit_logs(limit=1, action=discord.AuditLogAction.role_delete):
+            responsible_user = entry.user.mention
+            break
+    except Exception: pass
+
+    embed = discord.Embed(title="🗑️ רול נמחק מהשרת", description=f"**נמחק על ידי:** {responsible_user}\n\n**שם הרול שנמחק:** `{role.name}`\n**מזהה רול:** `{role.id}`", color=discord.Color.dark_red())
     embed.set_footer(text="Developed by Aharon the gamer")
     if os.path.exists(BACKGROUND_IMAGE):
         await log_channel.send(file=discord.File(BACKGROUND_IMAGE, filename="background.png"), embed=embed)

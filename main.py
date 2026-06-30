@@ -64,7 +64,7 @@ async def on_member_join(member: discord.Member):
         description=(
             f"ברוך הבא {member.mention} אל השרת הרשמי של **GamePlay IL**!\n\n"
             f"➔ אתה החבר ה-**{len(member.guild.members)}** בקהילה.\n"
-            f"➔ אנא היכנס לערוץ האימות או פתח פנייה לקבלת דרגות שירות."
+            f"➔ אנา היכנס לערוץ האימות או פתח פנייה לקבלת דרגות שירות."
         ),
         color=0x1a73e8
     )
@@ -233,6 +233,11 @@ class RoleApprovalView(discord.ui.View):
         await interaction.message.edit(embed=locked_embed, view=None)
         await interaction.response.send_message("✅ הפנייה נסגרה ידנית!", ephemeral=True)
         self.stop()
+
+class RoleRequestStarterView(discord.ui.View):
+    def __init__(self): super().__init__(timeout=None)
+    @discord.ui.button(label="להגשת בקשת רולים ודרגות", style=discord.ButtonStyle.primary, emoji="🎖️", custom_id="start_role_req_btn_spec")
+    async def start_request(self, interaction: discord.Interaction, button: discord.ui.Button): await interaction.response.send_modal(RoleRequestModal())
 class TicketActionButtons(discord.ui.View):
     def __init__(self, creator_id: int):
         super().__init__(timeout=None)
@@ -296,7 +301,7 @@ class TicketDropdown(discord.ui.Select):
 
     async def callback(self, interaction: discord.Interaction):
         guild = interaction.guild
-        ticket_type = self.values
+        ticket_type = self.values[0] # שולף איבר ראשון מהרשימה בצורה מדויקת
         
         overwrites = {guild.default_role: discord.PermissionOverwrite(view_channel=False), interaction.user: discord.PermissionOverwrite(view_channel=True, send_messages=True)}
         staff_role = guild.get_role(STAFF_TICKET_ROLE_ID)
@@ -312,22 +317,37 @@ class TicketDropdown(discord.ui.Select):
 class TicketStarterView(discord.ui.View):
     def __init__(self): super().__init__(timeout=None); self.add_item(TicketDropdown())
 
+@bot.command(name="setup_role_panel")
+@commands.has_permissions(administrator=True)
+async def setup_role_panel_cmd(ctx):
+    guild = ctx.guild
+    channel = guild.get_channel(ROLE_PANEL_CHANNEL_ID)
+    if not channel: return await ctx.send("❌ חדר פנל הרולים לא נמצא.")
+    
+    embed = discord.Embed(title="🎖️ מחלקת משטרת GamePlay-IL | בקשת דרגות ורולים", description="לחצו על הכפתור למטה ומלאו את הפרטים במדויק.", color=0x1a73e8)
+    embed.set_footer(text="Developed by Aharon the gamer")
+    if os.path.exists(BACKGROUND_IMAGE): embed.set_image(url="attachment://background.png")
+    
+    view = RoleRequestStarterView()
+    if os.path.exists(BACKGROUND_IMAGE):
+        await channel.send(file=discord.File(BACKGROUND_IMAGE, filename="background.png"), embed=embed, view=view)
+    else:
+        await channel.send(embed=embed, view=view)
+    try: await ctx.message.delete()
+    except Exception: pass
+
 @bot.command(name="setup_ticket_panel")
 @commands.has_permissions(administrator=True)
 async def setup_ticket_panel_cmd(ctx):
     await ctx.send(embed=discord.Embed(title="🎫 מחלקת המשטרה | פתיחת פניות ותמיכה"), view=TicketStarterView())
     try: await ctx.message.delete()
     except: pass
-# ==========================================
-# 📢 מערכת פנל ההכרזות הדיגיטלי הקבוע (Say Panel Selector)
-# ==========================================
 class SayChannelDropdown(discord.ui.Select):
     def __init__(self, channels):
         options = [discord.SelectOption(label=ch.name, value=str(ch.id), emoji="📢") for ch in channels[:25]]
         super().__init__(placeholder="בחר את ערוץ היעד להצבת ההכרזה...", options=options, custom_id="say_panel_dropdown_selector")
 
     async def callback(self, interaction: discord.Interaction):
-        # בדיקת רול אבטחה מורשה בלבד
         has_role = any(role.id == SAY_COMMAND_ROLE_ID for role in interaction.user.roles)
         if not has_role:
             return await interaction.response.send_message("❌ ההרשאה חסומה לבעלי תפקיד הכרזות בלבד.", ephemeral=True)
@@ -347,7 +367,6 @@ class SayChannelDropdown(discord.ui.Select):
             try: await user_msg.delete()
             except: pass
 
-            # בניית האמבד המשטרתי המפואר עם הרקע
             embed = discord.Embed(description=user_msg.content, color=0x1a73e8)
             embed.set_footer(text="Developed by Aharon the gamer")
 
@@ -369,7 +388,6 @@ class SayPanelStarterView(discord.ui.View):
 @bot.command(name="setup_say_panel")
 @commands.has_permissions(administrator=True)
 async def setup_say_panel_cmd(ctx):
-    # שולף את כל ערוצי הטקסט בשרת שלכם להצגה בתפריט הנפתח
     text_channels = [ch for ch in ctx.guild.channels if isinstance(ch, discord.TextChannel)]
     embed = discord.Embed(
         title="📢 מחלקת משטרת GamePlay-IL | מערכת שיגור הכרזות",
@@ -437,13 +455,12 @@ async def on_guild_channel_delete(channel: discord.abc.GuildChannel):
 async def on_ready():
     print(f"✅ Logged in as {bot.user.name}")
     
-    # טעינה מוקדמת קבועה של רשימת הערוצים לזיכרון עבור הפנל הנפתח
     guild = bot.get_guild(GUILD_ID)
     text_channels = [ch for ch in guild.channels if isinstance(ch, discord.TextChannel)] if guild else []
     
     bot.add_view(RoleRequestStarterView())
     bot.add_view(TicketStarterView())
-    bot.add_view(SayPanelStarterView(text_channels)) # רישום קבוע של פנל ה-Say בזיכרון הבוט!
+    bot.add_view(SayPanelStarterView(text_channels)) 
     if not track_fivem_status.is_running(): track_fivem_status.start()
 
 # הפעלת מנוע הבוט 24/7

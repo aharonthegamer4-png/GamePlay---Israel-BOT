@@ -50,7 +50,6 @@ def home():
 
 def run_flask():
     app.run(host='0.0.0.0', port=8080)
-
 # ==========================================
 # 👋 מערכת ברוכים הבאים ועזיבה (WELCOME & LEAVE SYSTEM)
 # ==========================================
@@ -103,7 +102,10 @@ async def on_member_remove(member: discord.Member):
         description=f"המשתמש **{member.name}** ({member.mention}) עזב את שרת המשטרה ברגע זה.\n\n**מזהה משתמש:** `{member.id}`",
         color=discord.Color.red()
     )
-    embed.set_thumbnail(url=member.avatar.url if member.avatar else member.default_avatar.url)
+    if member.avatar:
+        embed.set_thumbnail(url=member.avatar.url)
+    else:
+        embed.set_thumbnail(url=member.default_avatar.url)
     embed.set_footer(text="Developed by Aharon the gamer")
     
     if os.path.exists(BACKGROUND_IMAGE):
@@ -574,31 +576,28 @@ async def setup_ticket_panel_cmd(ctx):
     try: await ctx.message.delete()
     except Exception: pass
 # ==========================================
-# 📢 מנגנון ה-SAY המשודרג (תומך ב-!say וגם !SAY)
+# 📢 פקדת SAY הרשמית - קוראת את כל סוגי השמות (say, SAY, Say) בלייב!
 # ==========================================
-@bot.event
-async def on_message(message: discord.Message):
-    if message.author.bot: return
+@bot.command(name="say", aliases=["SAY", "Say"])
+async def say_command(ctx, *, message: str = None):
+    # בדיקה האם למשתמש יש את הרול הספציפי הנדרש להרצה
+    has_role = any(role.id == SAY_COMMAND_ROLE_ID for role in ctx.author.roles)
+    if not has_role: return
+        
+    if not message:
+        return await ctx.send(f"❌ שגיאה: אנא רשום טקסט לאחר הפקודה.", delete_after=5)
+
+    try: await ctx.message.delete() # מוחק את הפקודה המקורית שלך
+    except Exception: pass
+
+    embed = discord.Embed(description=message, color=0x1a73e8)
+    embed.set_footer(text="Developed by Aharon the gamer")
     
-    if message.content.lower().startswith('!say'):
-        has_role = any(role.id == SAY_COMMAND_ROLE_ID for role in message.author.roles)
-        if not has_role: return
-        
-        args = message.content[5:].strip()
-        if not args: return
-        
-        try: await message.delete()
-        except Exception: pass
-        
-        embed = discord.Embed(description=args, color=0x1a73e8)
-        embed.set_footer(text="Developed by Aharon the gamer")
-        
-        if os.path.exists(BACKGROUND_IMAGE):
-            await message.channel.send(file=discord.File(BACKGROUND_IMAGE, filename="background.png"), embed=embed)
-        else:
-            await message.channel.send(embed=embed)
-            
-    await bot.process_commands(message)
+    if os.path.exists(BACKGROUND_IMAGE):
+        embed.set_image(url="attachment://background.png")
+        await ctx.send(file=discord.File(BACKGROUND_IMAGE, filename="background.png"), embed=embed)
+    else:
+        await ctx.send(embed=embed)
 
 # ==========================================
 # 📊 משימה אוטומטית ברקע - פנייה ישירה ל-FiveM (מתחלף כל 10 שניות במדויק!)
@@ -706,20 +705,18 @@ async def on_guild_role_delete(role: discord.Role):
     if os.path.exists(BACKGROUND_IMAGE): await log_channel.send(file=discord.File(BACKGROUND_IMAGE, filename="background.png"), embed=embed)
     else: await log_channel.send(embed=embed)
 
-# 🎯 מנגנון לוגי החדרים האוטומטי (יצירה ומחיקה)
+# 📁 מנגנון לוגי החדרים האוטומטי (יצירה ומחיקה)
 @bot.event
 async def on_guild_channel_create(channel: discord.abc.GuildChannel):
     if channel.guild.id != GUILD_ID: return
     log_channel = channel.guild.get_channel(SERVER_AUDIT_LOG_CHANNEL_ID)
     if not log_channel: return
-    
     responsible_user = "מנהל שרת"
     try:
         async for entry in channel.guild.audit_logs(limit=1, action=discord.AuditLogAction.channel_create):
             responsible_user = entry.user.mention
             break
     except Exception: pass
-
     embed = discord.Embed(title="📁 ערוץ/חדר חדש נוצר בשרת", description=f"**נוצר על ידי:** {responsible_user}\n**שם החדר:** {channel.mention} (`{channel.name}`)\n**מזהה חדר:** `{channel.id}`", color=discord.Color.green())
     embed.set_footer(text="Developed by Aharon the gamer")
     if os.path.exists(BACKGROUND_IMAGE): await log_channel.send(file=discord.File(BACKGROUND_IMAGE, filename="background.png"), embed=embed)
@@ -730,14 +727,12 @@ async def on_guild_channel_delete(channel: discord.abc.GuildChannel):
     if channel.guild.id != GUILD_ID: return
     log_channel = channel.guild.get_channel(SERVER_AUDIT_LOG_CHANNEL_ID)
     if not log_channel: return
-    
     responsible_user = "מנהל שרת"
     try:
         async for entry in channel.guild.audit_logs(limit=1, action=discord.AuditLogAction.channel_delete):
             responsible_user = entry.user.mention
             break
     except Exception: pass
-
     embed = discord.Embed(title="🗑️ ערוץ/חדר נמחק מהשרת", description=f"**נמחק על ידי:** {responsible_user}\n**שם החדר שנמחק:** `{channel.name}`\n**מזהה חדר:** `{channel.id}`", color=discord.Color.dark_red())
     embed.set_footer(text="Developed by Aharon the gamer")
     if os.path.exists(BACKGROUND_IMAGE): await log_channel.send(file=discord.File(BACKGROUND_IMAGE, filename="background.png"), embed=embed)

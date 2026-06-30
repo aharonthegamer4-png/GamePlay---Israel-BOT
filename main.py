@@ -25,11 +25,11 @@ GUILD_ID = 1500997764169863271
 # רולים משטרתיים
 ROLE_APPROVER_ID = 1521553580148916325 # רול אישור דרגות
 STAFF_TICKET_ROLE_ID = 1521554756626157788 # רול צוות הטיקטים
-SAY_COMMAND_ROLE_ID = 1521602302622961857 # הרול הבלעדי שיכול להשתמש בפקודת !say
+SAY_COMMAND_ROLE_ID = 1521602302622961857 # הרול הבלעדי שיכול להשתמש בפקודות ההכרזה
 
 # חדרים רשמיים בשרת
 WELCOME_CHANNEL_ID = 1500997767256870922
-ROLE_PANEL_CHANNEL_ID = 1521623331990933544 # 🎯 חדר פנל בקשת הרולים המעודכן מהקישור שלך
+ROLE_PANEL_CHANNEL_ID = 1521623331990933544 # 🎯 חדר פנל ההכרזות הראשי (say-פנל) מהקישור שלך
 ROLE_APPROVAL_LOG_CHANNEL_ID = 1521554909021868073
 TICKET_PANEL_CHANNEL_ID = 1521555870268260423
 TICKET_LOG_CHANNEL_ID = 1521557178387795999
@@ -159,13 +159,11 @@ class DynamicRoleSelect(discord.ui.Select):
 
         roles_list = ", ".join(added_roles)
 
-        # שולח הודעה בפרטי לפני עריכת האינטראקציה
         try:
             dm_embed = discord.Embed(title="🚨 עדכון מחלקת המשטרה | בקשתך אושרה! ✨", description=f"שלום {target.mention},\nטופס בקשת הדרגות שלך אושר!\n\n**🎖️ הדרגות/רולים שקיבלת:**\n```{roles_list}```", color=discord.Color.green())
             await target.send(embed=dm_embed)
         except: pass
 
-        # נעילת פנל השליטה
         locked_embed = discord.Embed(title="🔒 פניית בקשת רולים טופלה וננעלה", color=discord.Color.green())
         if os.path.exists(BACKGROUND_IMAGE): locked_embed.set_image(url="attachment://background.png")
         locked_embed.add_field(name="🛡️ סטטוס מערכת", value="✅ הרולים הוענקו והפנל ננעל.", inline=False)
@@ -235,11 +233,6 @@ class RoleApprovalView(discord.ui.View):
         await interaction.message.edit(embed=locked_embed, view=None)
         await interaction.response.send_message("✅ הפנייה נסגרה ידנית!", ephemeral=True)
         self.stop()
-
-class RoleRequestStarterView(discord.ui.View):
-    def __init__(self): super().__init__(timeout=None)
-    @discord.ui.button(label="להגשת בקשת רולים ודרגות", style=discord.ButtonStyle.primary, emoji="🎖️", custom_id="start_role_req_btn_spec")
-    async def start_request(self, interaction: discord.Interaction, button: discord.ui.Button): await interaction.response.send_modal(RoleRequestModal())
 class TicketActionButtons(discord.ui.View):
     def __init__(self, creator_id: int):
         super().__init__(timeout=None)
@@ -319,25 +312,6 @@ class TicketDropdown(discord.ui.Select):
 class TicketStarterView(discord.ui.View):
     def __init__(self): super().__init__(timeout=None); self.add_item(TicketDropdown())
 
-@bot.command(name="setup_role_panel")
-@commands.has_permissions(administrator=True)
-async def setup_role_panel_cmd(ctx):
-    guild = ctx.guild
-    channel = guild.get_channel(ROLE_PANEL_CHANNEL_ID)
-    if not channel: return await ctx.send("❌ חדר פנל הרולים לא נמצא.")
-    
-    embed = discord.Embed(title="🎖️ מחלקת משטרת GamePlay-IL | בקשת דרגות ורולים", description="לחצו על הכפתור למטה ומלאו את הפרטים במדויק.", color=0x1a73e8)
-    embed.set_footer(text="Developed by Aharon the gamer")
-    if os.path.exists(BACKGROUND_IMAGE): embed.set_image(url="attachment://background.png")
-    
-    view = RoleRequestStarterView()
-    if os.path.exists(BACKGROUND_IMAGE):
-        await channel.send(file=discord.File(BACKGROUND_IMAGE, filename="background.png"), embed=embed, view=view)
-    else:
-        await channel.send(embed=embed, view=view)
-    try: await ctx.message.delete()
-    except Exception: pass
-
 @bot.command(name="setup_ticket_panel")
 @commands.has_permissions(administrator=True)
 async def setup_ticket_panel_cmd(ctx):
@@ -345,59 +319,73 @@ async def setup_ticket_panel_cmd(ctx):
     try: await ctx.message.delete()
     except: pass
 # ==========================================
-# 📢 1. פקדת SAY_PANEL הדו-שלבית (אפשרות 2)
+# 📢 מערכת פנל ההכרזות הדיגיטלי הקבוע (Say Panel Selector)
 # ==========================================
-@bot.command(name="say_panel")
-async def say_panel_command(ctx, target_channel: discord.TextChannel = None):
-    has_role = any(role.id == SAY_COMMAND_ROLE_ID for role in ctx.author.roles)
-    if not has_role: return
-        
-    if not target_channel:
-        return await ctx.send("❌ שגיאה: אנא תייג חדר בצורה הזו: `!say_panel #חדר`", delete_after=5)
+class SayChannelDropdown(discord.ui.Select):
+    def __init__(self, channels):
+        options = [discord.SelectOption(label=ch.name, value=str(ch.id), emoji="📢") for ch in channels[:25]]
+        super().__init__(placeholder="בחר את ערוץ היעד להצבת ההכרזה...", options=options, custom_id="say_panel_dropdown_selector")
 
+    async def callback(self, interaction: discord.Interaction):
+        # בדיקת רול אבטחה מורשה בלבד
+        has_role = any(role.id == SAY_COMMAND_ROLE_ID for role in interaction.user.roles)
+        if not has_role:
+            return await interaction.response.send_message("❌ ההרשאה חסומה לבעלי תפקיד הכרזות בלבד.", ephemeral=True)
+
+        guild = interaction.guild
+        target_channel = guild.get_channel(int(self.values[0]))
+        if not target_channel:
+            return await interaction.response.send_message("❌ ערוץ היעד לא נמצא.", ephemeral=True)
+
+        await interaction.response.send_message(f"👮‍♂️ אנא הקלד כעת (בהודעה הבאה שלך בצ'אט) את המלל הרשמי שברצונך לשגר לחדר {target_channel.mention}:", ephemeral=True)
+
+        def check(m):
+            return m.author.id == interaction.user.id and m.channel.id == interaction.channel.id
+
+        try:
+            user_msg = await bot.wait_for('message', check=check, timeout=60.0)
+            try: await user_msg.delete()
+            except: pass
+
+            # בניית האמבד המשטרתי המפואר עם הרקע
+            embed = discord.Embed(description=user_msg.content, color=0x1a73e8)
+            embed.set_footer(text="Developed by Aharon the gamer")
+
+            if os.path.exists(BACKGROUND_IMAGE):
+                embed.set_image(url="attachment://background.png")
+                await target_channel.send(file=discord.File(BACKGROUND_IMAGE, filename="background.png"), embed=embed)
+            else:
+                await target_channel.send(embed=embed)
+
+            await interaction.followup.send(f"✅ ההכרזה שוגרה בהצלחה לערוץ {target_channel.mention}!", ephemeral=True)
+        except asyncio.TimeoutError:
+            await interaction.followup.send("❌ עבר הזמן המוקצב (60 שניות). הפעולה בבוטלה.", ephemeral=True)
+
+class SayPanelStarterView(discord.ui.View):
+    def __init__(self, channels=None):
+        super().__init__(timeout=None)
+        if channels: self.add_item(SayChannelDropdown(channels))
+
+@bot.command(name="setup_say_panel")
+@commands.has_permissions(administrator=True)
+async def setup_say_panel_cmd(ctx):
+    # שולף את כל ערוצי הטקסט בשרת שלכם להצגה בתפריט הנפתח
+    text_channels = [ch for ch in ctx.guild.channels if isinstance(ch, discord.TextChannel)]
+    embed = discord.Embed(
+        title="📢 מחלקת משטרת GamePlay-IL | מערכת שיגור הכרזות",
+        description="בחר מתוך התפריט הנפתח למטה את חדר היעד שאליו תרצה לשלוח הודעה רשמית בשם הבוט.",
+        color=0x1a73e8
+    )
+    embed.set_footer(text="Developed by Aharon the gamer")
+    if os.path.exists(BACKGROUND_IMAGE): embed.set_image(url="attachment://background.png")
+
+    view = SayPanelStarterView(text_channels)
+    if os.path.exists(BACKGROUND_IMAGE):
+        await ctx.send(file=discord.File(BACKGROUND_IMAGE, filename="background.png"), embed=embed, view=view)
+    else:
+        await ctx.send(embed=embed, view=view)
     try: await ctx.message.delete()
     except: pass
-
-    prompt_msg = await ctx.send(f"👮‍♂️ {ctx.author.mention}, אנא הקלד כעת בצ'אט את ההודעה שברצונך לשלוח לחדר {target_channel.mention}:")
-
-    def check(m): return m.author.id == ctx.author.id and m.channel.id == ctx.channel.id
-    try:
-        user_msg = await bot.wait_for('message', check=check, timeout=60.0)
-        try: 
-            await user_msg.delete()
-            await prompt_msg.delete()
-        except: pass
-
-        embed = discord.Embed(description=user_msg.content, color=0x1a73e8)
-        embed.set_footer(text="Developed by Aharon the gamer")
-        
-        if os.path.exists(BACKGROUND_IMAGE):
-            embed.set_image(url="attachment://background.png")
-            await target_channel.send(file=discord.File(BACKGROUND_IMAGE, filename="background.png"), embed=embed)
-        else: await target_channel.send(embed=embed)
-    except asyncio.TimeoutError:
-        try: await prompt_msg.delete()
-        except: pass
-
-# ==========================================
-# 📢 2. פקדת SAY המיידית הרגילה (עם סימן הקריאה !) באותו החדר!
-# ==========================================
-@bot.command(name="say", aliases=["SAY", "Say"])
-async def say_command(ctx, *, message: str = None):
-    has_role = any(role.id == SAY_COMMAND_ROLE_ID for role in ctx.author.roles)
-    if not has_role: return
-    if not message: return
-
-    try: await ctx.message.delete()
-    except Exception: pass
-
-    embed = discord.Embed(description=message, color=0x1a73e8)
-    embed.set_footer(text="Developed by Aharon the gamer")
-    
-    if os.path.exists(BACKGROUND_IMAGE):
-        embed.set_image(url="attachment://background.png")
-        await ctx.send(file=discord.File(BACKGROUND_IMAGE, filename="background.png"), embed=embed)
-    else: await ctx.send(embed=embed)
 
 # ==========================================
 # 📊 משימה אוטומטית ברקע - פנייה ישירה ל-FiveM (מתחלף כל 10 שניות במדויק!)
@@ -432,7 +420,6 @@ async def track_fivem_status():
     else:
         status_text = "Online 🟢" if server_online else "Offline 🔴"
         status_cycle = 0
-        
     await bot.change_presence(activity=discord.Activity(type=discord.ActivityType.watching, name=status_text))
 
 @bot.event
@@ -449,8 +436,14 @@ async def on_guild_channel_delete(channel: discord.abc.GuildChannel):
 @bot.event
 async def on_ready():
     print(f"✅ Logged in as {bot.user.name}")
+    
+    # טעינה מוקדמת קבועה של רשימת הערוצים לזיכרון עבור הפנל הנפתח
+    guild = bot.get_guild(GUILD_ID)
+    text_channels = [ch for ch in guild.channels if isinstance(ch, discord.TextChannel)] if guild else []
+    
     bot.add_view(RoleRequestStarterView())
     bot.add_view(TicketStarterView())
+    bot.add_view(SayPanelStarterView(text_channels)) # רישום קבוע של פנל ה-Say בזיכרון הבוט!
     if not track_fivem_status.is_running(): track_fivem_status.start()
 
 # הפעלת מנוע הבוט 24/7

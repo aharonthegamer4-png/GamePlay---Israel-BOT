@@ -576,7 +576,7 @@ async def setup_ticket_panel_cmd(ctx):
     try: await ctx.message.delete()
     except Exception: pass
 # ==========================================
-# 📢 פקדת SAY הרשמית - קוראת את כל סוגי השמות (say, SAY, Say) בלייב!
+# 📢 פקודת SAY הרשמית - תומכת ב-say, SAY ו-Say דרך דיסקורד בצורה ישירה!
 # ==========================================
 @bot.command(name="say", aliases=["SAY", "Say"])
 async def say_command(ctx, *, message: str = None):
@@ -587,7 +587,7 @@ async def say_command(ctx, *, message: str = None):
     if not message:
         return await ctx.send(f"❌ שגיאה: אנא רשום טקסט לאחר הפקודה.", delete_after=5)
 
-    try: await ctx.message.delete() # מוחק את הפקודה המקורית שלך
+    try: await ctx.message.delete() # מוחק מיד את הודעת ה-! המשבשת שלכם מהערוץ
     except Exception: pass
 
     embed = discord.Embed(description=message, color=0x1a73e8)

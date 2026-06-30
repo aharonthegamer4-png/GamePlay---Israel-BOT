@@ -273,7 +273,7 @@ class RoleApprovalView(discord.ui.View):
             return False
         return True
 
-    @discord.ui.button(label="ענישה: BAN", style=discord.ButtonStyle.danger, emoji="🔨", custom_id="admin_action_ban")
+    @discord.ui.button(label="ענישה: BAN", style=discord.ButtonStyle.danger, emoji="🔨", custom_id="admin_action_ban_spec")
     async def ban_user(self, interaction: discord.Interaction, button: discord.ui.Button):
         guild = interaction.guild
         target = guild.get_member(self.target_user_id)
@@ -330,7 +330,7 @@ class RoleApprovalView(discord.ui.View):
         except discord.Forbidden:
             await interaction.response.send_message("❌ שגיאה: לבוט אין הרשאה לחסום משתמש זה.", ephemeral=True)
 
-    @discord.ui.button(label="ענישה: KICK", style=discord.ButtonStyle.secondary, emoji="🚪", custom_id="admin_action_kick")
+    @discord.ui.button(label="ענישה: KICK", style=discord.ButtonStyle.secondary, emoji="🚪", custom_id="admin_action_kick_spec")
     async def kick_user(self, interaction: discord.Interaction, button: discord.ui.Button):
         guild = interaction.guild
         target = guild.get_member(self.target_user_id)
@@ -387,7 +387,7 @@ class RoleApprovalView(discord.ui.View):
         except discord.Forbidden:
             await interaction.response.send_message("❌ שגיאה: לבוט אין הרשאה לזרוק משתמש זה.", ephemeral=True)
 
-    @discord.ui.button(label="סיום פנייה ונתינת רולים", style=discord.ButtonStyle.success, emoji="✅", custom_id="admin_action_finish")
+    @discord.ui.button(label="סיום פנייה ונתינת רולים", style=discord.ButtonStyle.success, emoji="✅", custom_id="admin_action_finish_spec")
     async def finish_request(self, interaction: discord.Interaction, button: discord.ui.Button):
         old_embed = interaction.message.embeds if interaction.message.embeds else None
         locked_embed = discord.Embed(
@@ -407,7 +407,7 @@ class RoleRequestStarterView(discord.ui.View):
     def __init__(self):
         super().__init__(timeout=None)
 
-    @discord.ui.button(label="להגשת בקשת רולים ודרגות", style=discord.ButtonStyle.primary, emoji="🎖️", custom_id="start_role_req_btn")
+    @discord.ui.button(label="להגשת בקשת רולים ודרגות", style=discord.ButtonStyle.primary, emoji="🎖️", custom_id="start_role_req_btn_spec")
     async def start_request(self, interaction: discord.Interaction, button: discord.ui.Button):
         await interaction.response.send_modal(RoleRequestModal())
 class TicketActionButtons(discord.ui.View):
@@ -422,7 +422,7 @@ class TicketActionButtons(discord.ui.View):
             return False
         return True
 
-    @discord.ui.button(label="לקיחת הפנייה", style=discord.ButtonStyle.success, emoji="📌", custom_id="ticket_claim")
+    @discord.ui.button(label="לקיחת הפנייה", style=discord.ButtonStyle.success, emoji="📌", custom_id="ticket_claim_spec")
     async def claim_ticket(self, interaction: discord.Interaction, button: discord.ui.Button):
         if self.claimed_by:
             return await interaction.response.send_message(f"❌ טיקט זה כבר נלקח לטיפול על ידי {self.claimed_by.mention}.", ephemeral=True)
@@ -432,7 +432,7 @@ class TicketActionButtons(discord.ui.View):
         await interaction.response.edit_message(view=self)
         await interaction.channel.send(f"📌 החבר צוות {interaction.user.mention} לקח על עצמו את הטיפול בפנייה זו!")
 
-    @discord.ui.button(label="שינוי שם חדר", style=discord.ButtonStyle.primary, emoji="✏️", custom_id="ticket_rename")
+    @discord.ui.button(label="שינוי שם חדר", style=discord.ButtonStyle.primary, emoji="✏️", custom_id="ticket_rename_spec")
     async def rename_ticket(self, interaction: discord.Interaction, button: discord.ui.Button):
         class RenameModal(discord.ui.Modal, title="שינוי שם חדר הטיקט"):
             new_name = discord.ui.TextInput(label="השם החדש של החדר", placeholder="בטיפול-אהרון", required=True)
@@ -441,7 +441,7 @@ class TicketActionButtons(discord.ui.View):
                 await inter.channel.edit(name=self.new_name.value)
         await interaction.response.send_modal(RenameModal())
 
-    @discord.ui.button(label="הוספת משתמש", style=discord.ButtonStyle.secondary, emoji="➕", custom_id="ticket_add_user")
+    @discord.ui.button(label="הוספת משתמש", style=discord.ButtonStyle.secondary, emoji="➕", custom_id="ticket_add_user_spec")
     async def add_user_ticket(self, interaction: discord.Interaction, button: discord.ui.Button):
         await interaction.response.send_message("👤 אנא תייג או רשום מזהה ID של האדם שברצונך להוסיף לחדר ברגע זה בצ'אט:", ephemeral=True)
         def check(m):
@@ -451,7 +451,7 @@ class TicketActionButtons(discord.ui.View):
             target_user = None
             
             if msg.mentions:
-                target_user = msg.mentions
+                target_user = msg.mentions[0]
             else:
                 match = re.search(r'\d+', msg.content)
                 if match:
@@ -467,7 +467,7 @@ class TicketActionButtons(discord.ui.View):
         except asyncio.TimeoutError:
             await interaction.channel.send("❌ עבר הזמן המוקצב להוספת משתמש. אנא לחץ שוב.")
 
-    @discord.ui.button(label="סגירת הפנייה", style=discord.ButtonStyle.danger, emoji="🔒", custom_id="ticket_close_main")
+    @discord.ui.button(label="סגירת הפנייה", style=discord.ButtonStyle.danger, emoji="🔒", custom_id="ticket_close_main_spec")
     async def close_ticket_panel(self, interaction: discord.Interaction, button: discord.ui.Button):
         class TicketCloseModal(discord.ui.Modal, title="סיכום וסגירת טיקט"):
             summary = discord.ui.TextInput(label="פירוט תמציתי של מה שהיה בטיקט", style=discord.TextStyle.long, required=True)
@@ -509,11 +509,11 @@ class TicketDropdown(discord.ui.Select):
             discord.SelectOption(label="תלונה על שוטר", description="הגשת תלונה רשמית למחלקת משמעת", emoji="🚨", value="תלונה על שוטר"),
             discord.SelectOption(label="אחר", description="פניות בנושאים שונים אחרים", emoji="📂", value="אחר")
         ]
-        super().__init__(placeholder="בחר את סוג הפנייה שלך מתוך הרשימה...", min_values=1, max_values=1, options=options, custom_id="ticket_dropdown_select_main")
+        super().__init__(placeholder="בחר את סוג הפנייה שלך מתוך הרשימה...", min_values=1, max_values=1, options=options, custom_id="ticket_dropdown_select_main_spec")
 
     async def callback(self, interaction: discord.Interaction):
         guild = interaction.guild
-        ticket_type = self.values
+        ticket_type = self.values[0]
         
         overwrites = {guild.default_role: discord.PermissionOverwrite(view_channel=False), interaction.user: discord.PermissionOverwrite(view_channel=True, send_messages=True, attach_files=True)}
         staff_role = guild.get_role(STAFF_TICKET_ROLE_ID)
@@ -586,9 +586,6 @@ async def say_command(ctx, *, message: str = None):
         
     if not message:
         return await ctx.send(f"❌ שגיאה: אנא רשום טקסט לאחר הפקודה.", delete_after=5)
-
-    try: await ctx.author.guild.get_member(ctx.author.id) # וידוא נוכחות של המנהל המריץ
-    except: pass
 
     try: await ctx.message.delete() # מוחק את הפקודה המקורית שלך בצ'אט
     except Exception: pass
@@ -708,7 +705,7 @@ async def on_guild_role_delete(role: discord.Role):
     if os.path.exists(BACKGROUND_IMAGE): await log_channel.send(file=discord.File(BACKGROUND_IMAGE, filename="background.png"), embed=embed)
     else: await log_channel.send(embed=embed)
 
-# 📁 מנגנון לוגי החדרים האוטומטי שביקשת (יצירה ומחיקה)
+# 📁 מנגנון לוגי החדרים האוטומטי (יצירה ומחיקה)
 @bot.event
 async def on_guild_channel_create(channel: discord.abc.GuildChannel):
     if channel.guild.id != GUILD_ID: return
@@ -743,6 +740,7 @@ async def on_guild_channel_delete(channel: discord.abc.GuildChannel):
 @bot.event
 async def on_ready():
     print(f"✅ Logged in as {bot.user.name}")
+    # 🎯 פתרון הזהב: רישום קבוע של ה-Views בזיכרון של הבוט למניעת Interaction Failed!
     bot.add_view(RoleRequestStarterView())
     bot.add_view(TicketStarterView())
     if not track_fivem_status.is_running(): track_fivem_status.start()

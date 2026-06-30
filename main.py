@@ -153,14 +153,21 @@ class DynamicRoleSelect(discord.ui.Select):
             return await interaction.followup.send("שגיאה: המשתמש לא נמצא בשרת.", ephemeral=True)
 
         added_roles = []
+        # לוגיקה אגרסיבית להענקת דרגות ללא חסימות תפקיד פנימיות
         for role_id_str in self.values:
             role = guild.get_role(int(role_id_str))
-            if role and role < guild.me.top_role:
-                await target.add_roles(role)
-                added_roles.append(role.name)
+            if role:
+                try:
+                    await target.add_roles(role)
+                    added_roles.append(role.name)
+                except discord.Forbidden:
+                    pass
+
+        if not added_roles:
+            return await interaction.followup.send("❌ שגיאה: לא ניתן להעניק את הרולים. ודא שרול הבוט נמצא בטופ של רשימת הרולים בשרת!", ephemeral=True)
 
         roles_list = ", ".join(added_roles)
-        await interaction.followup.send(f"🎖️ הרולים הבאים הוענקו בהצלחה ל-{target.mention}:\n**{roles_list}**", ephemeral=True)
+        await interaction.followup.send(f"🎖️ הדרגות הבאות הוענקו בהצלחה ל-{target.mention}:\n**{roles_list}**", ephemeral=True)
 
     async def _populate_options(self, guild: discord.Guild):
         options = []
@@ -171,7 +178,6 @@ class DynamicRoleSelect(discord.ui.Select):
             if len(options) == 25:
                 break
         self.options = options
-
 class RoleApprovalView(discord.ui.View):
     def __init__(self, target_user_id: int):
         super().__init__(timeout=None)
@@ -190,8 +196,11 @@ class RoleApprovalView(discord.ui.View):
         target = guild.get_member(self.target_user_id)
         if not target:
             return await interaction.response.send_message("המשתמש כבר לא נמצא בשרת.", ephemeral=True)
-        await target.ban(reason="נדחה בטופס הדרגות וקיבל הרחקה מההנהלה העליונה.")
-        await interaction.response.send_message(f"🔨 המשתמש {target.name} נחסם בהצלחה מהשרת לצמיתות.", ephemeral=True)
+        try:
+            await target.ban(reason="נדחה בטופס הדרגות וקיבל הרחקה מההנהלה העליונה.")
+            await interaction.response.send_message(f"🔨 המשתמש {target.name} נחסם בהצלחה מהשרת לצמיתות.", ephemeral=True)
+        except discord.Forbidden:
+            await interaction.response.send_message("❌ שגיאה: לבוט אין הרשאה לחסום משתמש זה.", ephemeral=True)
 
     @discord.ui.button(label="ענישה: KICK", style=discord.ButtonStyle.secondary, emoji="🚪", custom_id="admin_action_kick")
     async def kick_user(self, interaction: discord.Interaction, button: discord.ui.Button):
@@ -199,12 +208,35 @@ class RoleApprovalView(discord.ui.View):
         target = guild.get_member(self.target_user_id)
         if not target:
             return await interaction.response.send_message("המשתמש כבר לא נמצא בשרת.", ephemeral=True)
-        await target.kick(reason="נדחה בטופס הדרגות ונזרק מהשרת.")
-        await interaction.response.send_message(f"🚪 המשתמש {target.name} נזרק בהצלחה מהשרת.", ephemeral=True)
+        try:
+            await target.kick(reason="נדחה בטופס הדרגות ונזרק מהשרת.")
+            await interaction.response.send_message(f"🚪 המשתמש {target.name} נזרק בהצלחה מהשרת.", ephemeral=True)
+        except discord.Forbidden:
+            await interaction.response.send_message("❌ שגיאה: לבוט אין הרשאה לזרוק משתמש זה.", ephemeral=True)
 
     @discord.ui.button(label="סיום פנייה ונתינת רולים", style=discord.ButtonStyle.success, emoji="✅", custom_id="admin_action_finish")
     async def finish_request(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await interaction.response.send_message("✅ פניית הדרגות הסתיימה בהצלחה והרולים שנבחרו עודכנו!", ephemeral=True)
+        guild = interaction.guild
+        target = guild.get_member(self.target_user_id)
+        
+        # שלב 1: עדכון תוכן ההודעה המקורית והפיכתה ללוג קבוע ונעול
+        old_embed = interaction.message.embeds[0]
+        new_embed = discord.Embed(
+            title="🔒 פניית בקשת רולים ננעלה ואושרה",
+            description=old_embed.description,
+            color=discord.Color.green()
+        )
+        if old_embed.image:
+            new_embed.set_image(url="attachment://background.png")
+            
+        target_mention = target.mention if target else f"`{self.target_user_id}`"
+        new_embed.add_field(name="🛡️ סטטוס פנייה", value=f"✅ אושר ונסגר בהצלחה על ידי {interaction.user.mention}!", inline=False)
+        new_embed.add_field(name="👮‍♂️ מנהל מאשר", value=interaction.user.mention, inline=True)
+        new_embed.add_field(name="👤 משתמש שקיבל", value=target_mention, inline=True)
+        
+        # שלב 2: הסרת כל הכפתורים ותפריט הבחירה מההודעה כדי לנעול אותה
+        await interaction.message.edit(embed=new_embed, view=None)
+        await interaction.response.send_message("✅ הפנייה ננעלה בהצלחה ותפריט השליטה הוסר מהערוץ!", ephemeral=True)
         self.stop()
 
 class RoleRequestStarterView(discord.ui.View):
@@ -214,9 +246,6 @@ class RoleRequestStarterView(discord.ui.View):
     @discord.ui.button(label="להגשת בקשת רולים ודרגות", style=discord.ButtonStyle.primary, emoji="🎖️", custom_id="start_role_req_btn")
     async def start_request(self, interaction: discord.Interaction, button: discord.ui.Button):
         await interaction.response.send_modal(RoleRequestModal())
-# ==========================================
-# 🎫 מערכת טיקטים ופניות אינטראקטיבית
-# ==========================================
 class TicketActionButtons(discord.ui.View):
     def __init__(self, creator_id: int):
         super().__init__(timeout=None)
@@ -257,7 +286,7 @@ class TicketActionButtons(discord.ui.View):
         try:
             msg = await bot.wait_for('message', check=check, timeout=30.0)
             if msg.mentions:
-                target_user = msg.mentions
+                target_user = msg.mentions[0]
                 await interaction.channel.set_permissions(target_user, view_channel=True, send_messages=True)
                 await interaction.channel.send(f"✅ המשתמש {target_user.mention} נוסף בהצלחה לשיחת הטיקט על ידי {interaction.user.mention}!")
             else:
@@ -312,7 +341,7 @@ class TicketDropdown(discord.ui.Select):
 
     async def callback(self, interaction: discord.Interaction):
         guild = interaction.guild
-        ticket_type = self.values
+        ticket_type = self.values[0]
         
         overwrites = {
             guild.default_role: discord.PermissionOverwrite(view_channel=False),
@@ -346,36 +375,6 @@ class TicketStarterView(discord.ui.View):
     def __init__(self):
         super().__init__(timeout=None)
         self.add_item(TicketDropdown())
-# ==========================================
-# 👑 פנלים מתקדמים (STAFF PANELS)
-# ==========================================
-class StaffPanelButtons(discord.ui.View):
-    def __init__(self):
-        super().__init__(timeout=None)
-
-    @discord.ui.button(label="בדיקת סטטוס מערכת", style=discord.ButtonStyle.primary, emoji="📊", custom_id="staff_status")
-    async def status_check(self, interaction: discord.Interaction, button: discord.ui.Button):
-        embed = discord.Embed(title="📊 סטטוס בוט ומערכות", color=discord.Color.green())
-        embed.add_field(name="שרת אינטרנט (Keep Alive)", value="🟢 פעיל (פורט 8080)", inline=True)
-        embed.add_field(name="לולאת ניטור FiveM", value="🟢 פעילה (10 שניות)", inline=True)
-        embed.add_field(name="מערכת רולים", value="🟢 מחוברת ומאובטחת", inline=True)
-        await interaction.response.send_message(embed=embed, ephemeral=True)
-
-class CitizenPanelButtons(discord.ui.View):
-    def __init__(self):
-        super().__init__(timeout=None)
-
-    @discord.ui.button(label="החשבון שלי", style=discord.ButtonStyle.secondary, emoji="👤", custom_id="citizen_profile")
-    async def profile_check(self, interaction: discord.Interaction, button: discord.ui.Button):
-        user = interaction.user
-        embed = discord.Embed(title=f"👤 כרטיס אזרח - {user.name}", color=0x7289da)
-        embed.add_field(name="תאריך הצטרפות", value=user.created_at.strftime("%d/%m/%Y"), inline=True)
-        embed.add_field(name="הרול הגבוה ביותר שלך", value=user.top_role.mention, inline=True)
-        await interaction.response.send_message(embed=embed, ephemeral=True)
-
-    @discord.ui.button(label="פרטי חיבור לשרת המשחק", style=discord.ButtonStyle.primary, emoji="🎮", custom_id="citizen_connect")
-    async def connect_info(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await interaction.response.send_message(f"🎮 קישור חיבור ישיר לשרת FiveM: `cfx.re/join/am35ok`", ephemeral=True)
 
 # ==========================================
 # 🛠️ פקודות טקסט רגילות (!) להקמת המערכות
@@ -484,7 +483,7 @@ async def on_ready():
         track_fivem_status.start()
         
     try:
-        # 🎯 ניקוי מוחלט ואגרסיבי של כל פקודות הסלאש הרשומות מהטוקן הזה כדי למחוק את פקודות הרפאים!
+        # ניקוי מוחלט של פקודות הסלאש הרשומות מהטוקן הזה כדי שלא יישאר שום זכר לבוט 67 הישן
         bot.tree.clear_commands(guild=None)
         await bot.tree.sync(guild=None)
         print("🧹 Cleared all global slash commands successfully.")

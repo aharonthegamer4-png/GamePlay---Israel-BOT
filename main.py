@@ -32,7 +32,8 @@ ROLE_PANEL_CHANNEL_ID = 1500997767256870923
 ROLE_APPROVAL_LOG_CHANNEL_ID = 1521554909021868073
 TICKET_PANEL_CHANNEL_ID = 1521555870268260423
 TICKET_LOG_CHANNEL_ID = 1521557178387795999
-ROLE_GIVEN_LOG_CHANNEL_ID = 1521575503448768683 # חדר לוג נתינת רולים
+ROLE_GIVEN_LOG_CHANNEL_ID = 1521575503448768683 
+SERVER_AUDIT_LOG_CHANNEL_ID = 1521596321721487491 # 🎯 חדר לוגי האבטחה החדש שביקשת!
 
 # משתנה גלובלי לשמירת מצב הלולאה (0 = שחקנים, 1 = סטטוס אונליין/אופליין)
 status_cycle = 0
@@ -49,7 +50,7 @@ def home():
 def run_flask():
     app.run(host='0.0.0.0', port=8080)
 # ==========================================
-# 👋 מערכת ברוכים הבאים (WELCOME SYSTEM)
+# 👋 מערכת ברוכים הבאים ועזיבה (WELCOME & LEAVE SYSTEM)
 # ==========================================
 @bot.event
 async def on_member_join(member: discord.Member):
@@ -83,6 +84,31 @@ async def on_member_join(member: discord.Member):
         await channel.send(file=file, embed=embed, content=f"היי {member.mention}, ברוך הבא! 👮‍♂️💎")
     else:
         await channel.send(embed=embed, content=f"היי {member.mention}, ברוך הבא! 👮‍♂️💎")
+
+@bot.event
+async def on_member_remove(member: discord.Member):
+    if member.guild.id != GUILD_ID:
+        return
+        
+    log_channel = member.guild.get_channel(SERVER_AUDIT_LOG_CHANNEL_ID)
+    if not log_channel:
+        return
+
+    embed = discord.Embed(
+        title="🏃‍♂️ משתמש עזב את השרת",
+        description=f"המשתמש **{member.name}** ({member.mention}) עזב את שרת המשטרה ברגע זה.\n\n**מזהה משתמש:** `{member.id}`",
+        color=discord.Color.red()
+    )
+    if member.avatar:
+        embed.set_thumbnail(url=member.avatar.url)
+    embed.set_footer(text="Developed by Aharon the gamer")
+    
+    if os.path.exists(BACKGROUND_IMAGE):
+        file = discord.File(BACKGROUND_IMAGE, filename="background.png")
+        embed.set_image(url="attachment://background.png")
+        await log_channel.send(file=file, embed=embed)
+    else:
+        await log_channel.send(embed=embed)
 # ==========================================
 # 🎖️ מערכת פנל רולים ואישורים (ROLE REQUEST SYSTEM)
 # ==========================================
@@ -213,7 +239,7 @@ class DynamicRoleSelect(discord.ui.Select):
                 description=(
                     f"שלום {target.mention},\n"
                     f"שמחים לעדכן אותך כי טופס בקשת הדרגות שלך בשרת **GamePlay IL** נבדק ואושר! 👮‍♂️\n\n"
-                    f"** המנהל המאשר:** {interaction.user.name}\n"
+                    f"**המנהל המאשר:** {interaction.user.name}\n"
                     f"**🎖️ הדרגות/רולים שקיבלת:**\n```{roles_list}```\n"
                     f"עלה והצלח בשמירה על החוק והסדר בשרת! 🚓"
                 ),
@@ -222,7 +248,7 @@ class DynamicRoleSelect(discord.ui.Select):
             dm_embed.set_footer(text="Developed by Aharon the gamer")
             await target.send(embed=dm_embed)
         except Exception:
-            pass # במידה וההודעות הפרטיות שלו חסומות
+            pass
 
         await interaction.followup.send(f"🎖️ הדרגות הבאות הוענקו בהצלחה, הודעת DM נשלחה והלוגים ננעלו:\n**{roles_list}**", ephemeral=True)
 
@@ -255,7 +281,6 @@ class RoleApprovalView(discord.ui.View):
             return await interaction.response.send_message("המשתמש כבר לא נמצא בשרת.", ephemeral=True)
         
         try:
-            # ✉️ שלב 1: שליחת הודעה פרטית (DM) למשתמש על הדחייה והחסימה
             try:
                 dm_ban = discord.Embed(
                     title="🚨 עדכון מחלקת המשטרה | בקשתך נדחתה ❌",
@@ -270,10 +295,8 @@ class RoleApprovalView(discord.ui.View):
                 await target.send(embed=dm_ban)
             except Exception: pass
 
-            # שלב 2: ביצוע החסימה בפועל
             await target.ban(reason="נדחה בטופס הדרגות וקיבל הרחקה מההנהלה העליונה.")
             
-            # 🔒 שלב 3: נעילה מיידית של הפנל המקורי
             old_embed = interaction.message.embeds if interaction.message.embeds else None
             locked_embed = discord.Embed(
                 title="🔒 פניית בקשת רולים נדחתה וננעלה",
@@ -285,7 +308,6 @@ class RoleApprovalView(discord.ui.View):
             locked_embed.set_footer(text="Developed by Aharon the gamer")
             await interaction.message.edit(embed=locked_embed, view=None)
 
-            # 📄 שלב 4: שליחת לוג רשמי לחדר הלוגים של הרולים
             log_channel = guild.get_channel(ROLE_GIVEN_LOG_CHANNEL_ID)
             if log_channel:
                 ban_embed = discord.Embed(
@@ -316,7 +338,6 @@ class RoleApprovalView(discord.ui.View):
             return await interaction.response.send_message("המשתמש כבר לא נמצא בשרת.", ephemeral=True)
         
         try:
-            # ✉️ שלב 1: שליחת הודעה פרטית (DM) למשתמש על הדחייה והקיק
             try:
                 dm_kick = discord.Embed(
                     title="🚨 עדכון מחלקת המשטרה | בקשתך נדחתה ❌",
@@ -331,10 +352,8 @@ class RoleApprovalView(discord.ui.View):
                 await target.send(embed=dm_kick)
             except Exception: pass
 
-            # שלב 2: ביצוע הקיק בפועל
             await target.kick(reason="נדחה בטופס הדרגות ונזרק מהשרת.")
             
-            # 🔒 שלב 3: נעילה מיידית של הפנל המקורי
             old_embed = interaction.message.embeds if interaction.message.embeds else None
             locked_embed = discord.Embed(
                 title="🔒 פניית בקשת רולים נדחתה וננעלה",
@@ -346,7 +365,6 @@ class RoleApprovalView(discord.ui.View):
             locked_embed.set_footer(text="Developed by Aharon the gamer")
             await interaction.message.edit(embed=locked_embed, view=None)
 
-            # 📄 שלב 4: שליחת לוג רשמי לחדר הלוגים של הרולים
             log_channel = guild.get_channel(ROLE_GIVEN_LOG_CHANNEL_ID)
             if log_channel:
                 kick_embed = discord.Embed(
@@ -432,7 +450,6 @@ class TicketActionButtons(discord.ui.View):
             msg = await bot.wait_for('message', check=check, timeout=30.0)
             target_user = None
             
-            # 🎯 מנגנון פריצה חכם: קילוף תיוג דיסקורד ישיר או קריאת ID נקי
             if msg.mentions:
                 target_user = msg.mentions[0]
             else:
@@ -441,13 +458,12 @@ class TicketActionButtons(discord.ui.View):
                     target_user = interaction.guild.get_member(int(match.group()))
 
             if target_user:
-                # עדכון הרשאות ישיר לערוץ הטיקט
                 await interaction.channel.set_permissions(target_user, view_channel=True, send_messages=True, attach_files=True)
                 await interaction.channel.send(f"✅ המשתמש {target_user.mention} נוסף בהצלחה לשיחת הטיקט על ידי {interaction.user.mention}!")
                 try: await msg.delete()
                 except Exception: pass
             else:
-                await interaction.channel.send("❌ שגיאה: לא זוהה תיוג או ID תקין של משתמש בשרת. הפעולה בוטלה.")
+                await interaction.channel.send("❌ שגיאה: לא זוהה תיוג או ID תקין של משתמש בשרת. הפעולה בבוטלה.")
         except asyncio.TimeoutError:
             await interaction.channel.send("❌ עבר הזמן המוקצב להוספת משתמש. אנא לחץ שוב.")
 
@@ -598,6 +614,57 @@ async def track_fivem_status():
         status_cycle = 0
         
     await bot.change_presence(activity=discord.Activity(type=discord.ActivityType.watching, name=status_text))
+
+# ==========================================
+# 🛡️ מערכת לוגי אבטחה מתקדמת לרולים בשרת (AUDIT LOGS EVENTS)
+# ==========================================
+@bot.event
+async def on_member_update(before: discord.Member, after: discord.Member):
+    if before.guild.id != GUILD_ID: return
+    log_channel = before.guild.get_channel(SERVER_AUDIT_LOG_CHANNEL_ID)
+    if not log_channel: return
+
+    # בדיקה האם רול כלשהו נוסף למשתמש
+    if len(before.roles) < len(after.roles):
+        new_role = next(role for role in after.roles if role not in before.roles)
+        embed = discord.Embed(title="🟢 רול הוענק למשתמש", description=f"למשתמש {after.mention} הוענק רול חדש במערכת.\n\n**הרול שהוענק:** {new_role.mention}\n**מזהה רול:** `{new_role.id}`", color=discord.Color.green())
+        embed.set_footer(text="Developed by Aharon the gamer")
+        if os.path.exists(BACKGROUND_IMAGE):
+            await log_channel.send(file=discord.File(BACKGROUND_IMAGE, filename="background.png"), embed=embed)
+        else: await log_channel.send(embed=embed)
+
+    # בדיקה האם רול כלשהו הוסר מהמשתמש
+    elif len(before.roles) > len(after.roles):
+        removed_role = next(role for role in before.roles if role not in after.roles)
+        embed = discord.Embed(title="🔴 רול הוסר ממשתמש", description=f"למשתמש {after.mention} הוסר רול מהפרופיל.\n\n**הרול שהוסר:** {removed_role.mention}\n**מזהה רול:** `{removed_role.id}`", color=discord.Color.red())
+        embed.set_footer(text="Developed by Aharon the gamer")
+        if os.path.exists(BACKGROUND_IMAGE):
+            await log_channel.send(file=discord.File(BACKGROUND_IMAGE, filename="background.png"), embed=embed)
+        else: await log_channel.send(embed=embed)
+
+@bot.event
+async def on_guild_role_create(role: discord.Role):
+    if role.guild.id != GUILD_ID: return
+    log_channel = role.guild.get_channel(SERVER_AUDIT_LOG_CHANNEL_ID)
+    if not log_channel: return
+
+    embed = discord.Embed(title="✨ רול חדש נוצר בשרת", description=f"נוצר רול חדש לחלוטין בהגדרות השרת.\n\n**שם הרול:** `{role.name}`\n**מזהה רול:** `{role.id}`", color=discord.Color.blue())
+    embed.set_footer(text="Developed by Aharon the gamer")
+    if os.path.exists(BACKGROUND_IMAGE):
+        await log_channel.send(file=discord.File(BACKGROUND_IMAGE, filename="background.png"), embed=embed)
+    else: await log_channel.send(embed=embed)
+
+@bot.event
+async def on_guild_role_delete(role: discord.Role):
+    if role.guild.id != GUILD_ID: return
+    log_channel = role.guild.get_channel(SERVER_AUDIT_LOG_CHANNEL_ID)
+    if not log_channel: return
+
+    embed = discord.Embed(title="🗑️ רול נמחק מהשרת", description=f"רול קיים נמחק לחלוטין מהגדרות השרת.\n\n**שם הרול שנמחק:** `{role.name}`\n**מזהה רול:** `{role.id}`", color=discord.Color.dark_red())
+    embed.set_footer(text="Developed by Aharon the gamer")
+    if os.path.exists(BACKGROUND_IMAGE):
+        await log_channel.send(file=discord.File(BACKGROUND_IMAGE, filename="background.png"), embed=embed)
+    else: await log_channel.send(embed=embed)
 
 async def setup_dynamic_selects(guild: discord.Guild, view: RoleApprovalView):
     for item in view.children:

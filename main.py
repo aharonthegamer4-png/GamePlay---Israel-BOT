@@ -6,6 +6,7 @@ from threading import Thread
 import urllib.request
 import json
 import asyncio
+import re
 
 TOKEN = os.environ.get("DISCORD_TOKEN")
 
@@ -172,7 +173,7 @@ class DynamicRoleSelect(discord.ui.Select):
         old_embed = interaction.message.embeds
         locked_embed = discord.Embed(
             title="🔒 פניית בקשת רולים טופלה וננעלה",
-            description=old_embed[0].description if old_embed else "טופס בקשת דרגות",
+            description=old_embed.description if old_embed else "טופס בקשת דרגות",
             color=discord.Color.green()
         )
         if os.path.exists(BACKGROUND_IMAGE):
@@ -184,13 +185,13 @@ class DynamicRoleSelect(discord.ui.Select):
         locked_embed.set_footer(text="Developed by Aharon the gamer")
         await interaction.message.edit(embed=locked_embed, view=None)
 
-        # 📄 שלב 2: שליחת הלוג לחדר החדש שציינת
+        # 📄 שלב 2: שליחת הלוג לחדר הלוגים של הרולים
         log_channel = guild.get_channel(ROLE_GIVEN_LOG_CHANNEL_ID)
         if log_channel:
             given_embed = discord.Embed(
                 title="🎖️ לוג רשמי - הענקת דרגות ורולים",
                 description=(
-                    f"**Action:** הענקת רולים ודרגות 🎖*\n"
+                    f"**Action:** הענקת רולים ודרגות 🎖️\n"
                     f"**המנהל המאשר:** {interaction.user.mention} (`{interaction.user.id}`)\n"
                     f"**המשתמש שקיבל:** {target.mention} (`{target.id}`)\n\n"
                     f"**הרולים שהוענקו בהצלחה:**\n```{roles_list}```"
@@ -205,7 +206,25 @@ class DynamicRoleSelect(discord.ui.Select):
             else:
                 await log_channel.send(embed=given_embed)
 
-        await interaction.followup.send(f"🎖️ الדרגות הבאות הוענקו בהצלחה והלוגים ננעלו ונשלחו:\n**{roles_list}**", ephemeral=True)
+        # ✉️ שלב 3: שליחת הודעה פרטית (DM) למשתמש שהרולים שלו אושרו!
+        try:
+            dm_embed = discord.Embed(
+                title="🚨 עדכון מחלקת המשטרה | בקשתך אושרה! ✨",
+                description=(
+                    f"שלום {target.mention},\n"
+                    f"שמחים לעדכן אותך כי טופס בקשת הדרגות שלך בשרת **GamePlay IL** נבדק ואושר! 👮‍♂️\n\n"
+                    f"** המנהל המאשר:** {interaction.user.name}\n"
+                    f"**🎖️ הדרגות/רולים שקיבלת:**\n```{roles_list}```\n"
+                    f"עלה והצלח בשמירה על החוק והסדר בשרת! 🚓"
+                ),
+                color=discord.Color.green()
+            )
+            dm_embed.set_footer(text="Developed by Aharon the gamer")
+            await target.send(embed=dm_embed)
+        except Exception:
+            pass # במידה וההודעות הפרטיות שלו חסומות
+
+        await interaction.followup.send(f"🎖️ הדרגות הבאות הוענקו בהצלחה, הודעת DM נשלחה והלוגים ננעלו:\n**{roles_list}**", ephemeral=True)
 
     async def _populate_options(self, guild: discord.Guild):
         options = []
@@ -236,13 +255,29 @@ class RoleApprovalView(discord.ui.View):
             return await interaction.response.send_message("המשתמש כבר לא נמצא בשרת.", ephemeral=True)
         
         try:
+            # ✉️ שלב 1: שליחת הודעה פרטית (DM) למשתמש על הדחייה והחסימה
+            try:
+                dm_ban = discord.Embed(
+                    title="🚨 עדכון מחלקת המשטרה | בקשתך נדחתה ❌",
+                    description=(
+                        f"שלום {target.name},\n"
+                        f"אנא שים לב כי טופס בקשת הדרגות שלך בשרת **GamePlay IL** נדחה על ידי ההנהלה העליונה.\n"
+                        f"עקב כך, הוחלט להרחיק אותך לצמידות ממערכות השרת (BAN). 🔨"
+                    ),
+                    color=discord.Color.red()
+                )
+                dm_ban.set_footer(text="Developed by Aharon the gamer")
+                await target.send(embed=dm_ban)
+            except Exception: pass
+
+            # שלב 2: ביצוע החסימה בפועל
             await target.ban(reason="נדחה בטופס הדרגות וקיבל הרחקה מההנהלה העליונה.")
             
-            # 🔒 נעילה מיידית של הפנל המקורי
+            # 🔒 שלב 3: נעילה מיידית של הפנל המקורי
             old_embed = interaction.message.embeds if interaction.message.embeds else None
             locked_embed = discord.Embed(
                 title="🔒 פניית בקשת רולים נדחתה וננעלה",
-                description=old_embed[0].description if old_embed else "טופס בקשת דרגות",
+                description=old_embed.description if old_embed else "טופס בקשת דרגות",
                 color=discord.Color.red()
             )
             if os.path.exists(BACKGROUND_IMAGE): locked_embed.set_image(url="attachment://background.png")
@@ -250,7 +285,7 @@ class RoleApprovalView(discord.ui.View):
             locked_embed.set_footer(text="Developed by Aharon the gamer")
             await interaction.message.edit(embed=locked_embed, view=None)
 
-            # 📄 שליחת לוג רשמי לחדר הלוגים שביקשת
+            # 📄 שלב 4: שליחת לוג רשמי לחדר הלוגים של הרולים
             log_channel = guild.get_channel(ROLE_GIVEN_LOG_CHANNEL_ID)
             if log_channel:
                 ban_embed = discord.Embed(
@@ -281,13 +316,29 @@ class RoleApprovalView(discord.ui.View):
             return await interaction.response.send_message("המשתמש כבר לא נמצא בשרת.", ephemeral=True)
         
         try:
+            # ✉️ שלב 1: שליחת הודעה פרטית (DM) למשתמש על הדחייה והקיק
+            try:
+                dm_kick = discord.Embed(
+                    title="🚨 עדכון מחלקת המשטרה | בקשתך נדחתה ❌",
+                    description=(
+                        f"שלום {target.name},\n"
+                        f"אנא שים לב כי טופס בקשת הדרגות שלך בשרת **GamePlay IL** נדחה על ידי ההנהלה העליונה.\n"
+                        f"עקב כך, הוחלט לנתק אותך ממערכות השרת הנוכחיות (KICK). 🚪"
+                    ),
+                    color=discord.Color.orange()
+                )
+                dm_kick.set_footer(text="Developed by Aharon the gamer")
+                await target.send(embed=dm_kick)
+            except Exception: pass
+
+            # שלב 2: ביצוע הקיק בפועל
             await target.kick(reason="נדחה בטופס הדרגות ונזרק מהשרת.")
             
-            # 🔒 נעילה מיידית של הפנל המקורי
+            # 🔒 שלב 3: נעילה מיידית של הפנל המקורי
             old_embed = interaction.message.embeds if interaction.message.embeds else None
             locked_embed = discord.Embed(
                 title="🔒 פניית בקשת רולים נדחתה וננעלה",
-                description=old_embed[0].description if old_embed else "טופס בקשת דרגות",
+                description=old_embed.description if old_embed else "טופס בקשת דרגות",
                 color=discord.Color.orange()
             )
             if os.path.exists(BACKGROUND_IMAGE): locked_embed.set_image(url="attachment://background.png")
@@ -295,7 +346,7 @@ class RoleApprovalView(discord.ui.View):
             locked_embed.set_footer(text="Developed by Aharon the gamer")
             await interaction.message.edit(embed=locked_embed, view=None)
 
-            # 📄 שליחת לוג רשמי לחדר הלוגים שביקשת
+            # 📄 שלב 4: שליחת לוג רשמי לחדר הלוגים של הרולים
             log_channel = guild.get_channel(ROLE_GIVEN_LOG_CHANNEL_ID)
             if log_channel:
                 kick_embed = discord.Embed(
@@ -320,11 +371,10 @@ class RoleApprovalView(discord.ui.View):
 
     @discord.ui.button(label="סיום פנייה ונתינת רולים", style=discord.ButtonStyle.success, emoji="✅", custom_id="admin_action_finish")
     async def finish_request(self, interaction: discord.Interaction, button: discord.ui.Button):
-        guild = interaction.guild
         old_embed = interaction.message.embeds if interaction.message.embeds else None
         locked_embed = discord.Embed(
             title="🔒 פניית בקשת רולים נסגרה ידנית",
-            description=old_embed[0].description if old_embed else "טופס בקשת דרגות",
+            description=old_embed.description if old_embed else "טופס בקשת דרגות",
             color=discord.Color.green()
         )
         if os.path.exists(BACKGROUND_IMAGE): locked_embed.set_image(url="attachment://background.png")
@@ -375,20 +425,34 @@ class TicketActionButtons(discord.ui.View):
 
     @discord.ui.button(label="הוספת משתמש", style=discord.ButtonStyle.secondary, emoji="➕", custom_id="ticket_add_user")
     async def add_user_ticket(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await interaction.response.send_message("👤 אנא תייג את האדם שברצונך להוסיף לחדר ברגע זה בצ'אט:", ephemeral=True)
+        await interaction.response.send_message("👤 אנא תייג או רשום מזהה ID של האדם שברצונך להוסיף לחדר ברגע זה בצ'אט:", ephemeral=True)
         def check(m):
             return m.channel.id == interaction.channel.id and m.author.id == interaction.user.id
         try:
             msg = await bot.wait_for('message', check=check, timeout=30.0)
+            target_user = None
+            
+            # 🎯 מנגנון פריצה חכם: קילוף תיוג דיסקורד ישיר או קריאת ID נקי
             if msg.mentions:
-                await interaction.channel.set_permissions(msg.mentions, view_channel=True, send_messages=True)
-                await interaction.channel.send(f"✅ המשתמש {msg.mentions.mention} נוסף בהצלחה לשיחת הטיקט!")
+                target_user = msg.mentions[0]
+            else:
+                match = re.search(r'\d+', msg.content)
+                if match:
+                    target_user = interaction.guild.get_member(int(match.group()))
+
+            if target_user:
+                # עדכון הרשאות ישיר לערוץ הטיקט
+                await interaction.channel.set_permissions(target_user, view_channel=True, send_messages=True, attach_files=True)
+                await interaction.channel.send(f"✅ המשתמש {target_user.mention} נוסף בהצלחה לשיחת הטיקט על ידי {interaction.user.mention}!")
+                try: await msg.delete()
+                except Exception: pass
+            else:
+                await interaction.channel.send("❌ שגיאה: לא זוהה תיוג או ID תקין של משתמש בשרת. הפעולה בוטלה.")
         except asyncio.TimeoutError:
             await interaction.channel.send("❌ עבר הזמן המוקצב להוספת משתמש. אנא לחץ שוב.")
 
     @discord.ui.button(label="סגירת הפנייה", style=discord.ButtonStyle.danger, emoji="🔒", custom_id="ticket_close_main")
     async def close_ticket_panel(self, interaction: discord.Interaction, button: discord.ui.Button):
-        # 🎯 תיקון קריטי לשגיאת Interaction Failed: שימוש בטופס סגירה מובנה מתוך ה-interaction בלייב
         class TicketCloseModal(discord.ui.Modal, title="סיכום וסגירת טיקט"):
             summary = discord.ui.TextInput(label="פירוט תמציתי של מה שהיה בטיקט", style=discord.TextStyle.long, required=True)
             answered = discord.ui.TextInput(label="האם הטיקט קיבל מענה מלא? (כן / לא)", required=True)
@@ -474,7 +538,8 @@ async def setup_role_panel_cmd(ctx):
         await channel.send(file=discord.File(BACKGROUND_IMAGE, filename="background.png"), embed=embed, view=view)
     else:
         await channel.send(embed=embed, view=view)
-    await ctx.send(f"✅ פנל בקשת הרולים הוקם בהצלחה בחדר {channel.mention}!")
+    try: await ctx.message.delete()
+    except Exception: pass
 
 @bot.command(name="setup_ticket_panel")
 @commands.has_permissions(administrator=True)
@@ -492,7 +557,8 @@ async def setup_ticket_panel_cmd(ctx):
         await channel.send(file=discord.File(BACKGROUND_IMAGE, filename="background.png"), embed=embed, view=view)
     else:
         await channel.send(embed=embed, view=view)
-    await ctx.send(f"✅ פנל הטיקטים המעוצב הוקם בהצלחה בחדר {channel.mention}!")
+    try: await ctx.message.delete()
+    except Exception: pass
 # ==========================================
 # 📊 משימה אוטומטית ברקע - פנייה ישירה ודינמית ל-FiveM (כל 10 שניות במדויק!)
 # ==========================================
@@ -506,7 +572,6 @@ async def track_fivem_status():
     max_players = 8
     server_online = False
     
-    # משיכת כמות שחקנים חיה מה-IP שלכם
     try:
         url_players = f"http://{SERVER_IP}:{SERVER_PORT}/players.json"
         req_players = urllib.request.Request(url_players)
@@ -514,10 +579,8 @@ async def track_fivem_status():
         with urllib.request.urlopen(req_players, timeout=4) as response:
             players_count = len(json.loads(response.read().decode()))
             server_online = True
-    except Exception:
-        server_online = False
+    except Exception: server_online = False
         
-    # משיכת כמות מקומות (Slots) דינמית ומשתנה ישירות מתוך קובץ ההגדרות של השרת שלכם!
     try:
         url_info = f"http://{SERVER_IP}:{SERVER_PORT}/info.json"
         req_info = urllib.request.Request(url_info)
@@ -525,8 +588,7 @@ async def track_fivem_status():
         with urllib.request.urlopen(req_info, timeout=4) as info_response:
             info_data = json.loads(info_response.read().decode())
             max_players = int(info_data.get('Data', {}).get('sv_maxclients', info_data.get('sv_maxclients', 8)))
-    except Exception:
-        pass
+    except Exception: pass
         
     if status_cycle == 0:
         status_text = f"{players_count}/{max_players} שחקנים" if server_online else f"0/{max_players}"
@@ -551,7 +613,7 @@ async def on_ready():
     print(f"✅ Logged in as {bot.user.name} (ID: {bot.user.id})")
     print("------")
     bot.add_view(RoleRequestStarterView())
-    bot.add_view(TicketActionButtons(0)) # רישום קבוע ל-View של הטיקטים לתמיד
+    bot.add_view(TicketStarterView())
     if not track_fivem_status.is_running(): track_fivem_status.start()
         
     try:

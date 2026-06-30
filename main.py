@@ -102,7 +102,10 @@ async def on_member_remove(member: discord.Member):
         description=f"המשתמש **{member.name}** ({member.mention}) עזב את שרת המשטרה ברגע זה.\n\n**מזהה משתמש:** `{member.id}`",
         color=discord.Color.red()
     )
-    embed.set_thumbnail(url=member.avatar.url if member.avatar else member.default_avatar.url)
+    if member.avatar:
+        embed.set_thumbnail(url=member.avatar.url)
+    else:
+        embed.set_thumbnail(url=member.default_avatar.url)
     embed.set_footer(text="Developed by Aharon the gamer")
     
     if os.path.exists(BACKGROUND_IMAGE):
@@ -448,7 +451,7 @@ class TicketActionButtons(discord.ui.View):
             target_user = None
             
             if msg.mentions:
-                target_user = msg.mentions
+                target_user = msg.mentions[0]
             else:
                 match = re.search(r'\d+', msg.content)
                 if match:
@@ -510,7 +513,7 @@ class TicketDropdown(discord.ui.Select):
 
     async def callback(self, interaction: discord.Interaction):
         guild = interaction.guild
-        ticket_type = self.values
+        ticket_type = self.values[0]
         
         overwrites = {guild.default_role: discord.PermissionOverwrite(view_channel=False), interaction.user: discord.PermissionOverwrite(view_channel=True, send_messages=True, attach_files=True)}
         staff_role = guild.get_role(STAFF_TICKET_ROLE_ID)
@@ -577,7 +580,6 @@ async def setup_ticket_panel_cmd(ctx):
 # ==========================================
 @bot.command(name="say")
 async def say_command(ctx, *, message: str = None):
-    # בדיקה האם למשתמש יש את הרול הספציפי הנדרש להרצה
     has_role = any(role.id == SAY_COMMAND_ROLE_ID for role in ctx.author.roles)
     if not has_role: return
         
@@ -596,9 +598,6 @@ async def say_command(ctx, *, message: str = None):
     else:
         await ctx.send(embed=embed)
 
-# ==========================================
-# 📊 משימה אוטומטית ברקע - פנייה ישירה ל-FiveM (מתחלף כל 10 שניות במדויק!)
-# ==========================================
 @tasks.loop(seconds=10)
 async def track_fivem_status():
     global status_cycle
@@ -633,9 +632,6 @@ async def track_fivem_status():
         
     await bot.change_presence(activity=discord.Activity(type=discord.ActivityType.watching, name=status_text))
 
-# ==========================================
-# 🛡️ מערכת לוגי אבטחה משוכללת מבוססת יומן המערכת (AUDIT LOGS EVENTS)
-# ==========================================
 @bot.event
 async def on_member_update(before: discord.Member, after: discord.Member):
     if before.guild.id != GUILD_ID: return
@@ -651,7 +647,7 @@ async def on_member_update(before: discord.Member, after: discord.Member):
                     responsible_user = entry.user.mention
                     break
         except Exception: pass
-        embed = discord.Embed(title="🟢 רול הוענק למשתמש", description=f"**המשתמש שקיבל:** {after.mention}\n**המנהל המעניק:** {responsible_user}\n\n**הרול שהוענק:** {new_role.mention}", color=discord.Color.green())
+        embed = discord.Embed(title="🟢 רול הוענק למשתמש", description=f"**המשתמש שקיבל:** {after.mention}\n**המשנה:** {responsible_user}\n\n**הרול:** {new_role.mention}", color=discord.Color.green())
         embed.set_footer(text="Developed by Aharon the gamer")
         if os.path.exists(BACKGROUND_IMAGE): await log_channel.send(file=discord.File(BACKGROUND_IMAGE, filename="background.png"), embed=embed)
         else: await log_channel.send(embed=embed)
@@ -665,7 +661,7 @@ async def on_member_update(before: discord.Member, after: discord.Member):
                     responsible_user = entry.user.mention
                     break
         except Exception: pass
-        embed = discord.Embed(title="🔴 רול הוסר ממשתמש", description=f"**המשתמש:** {after.mention}\n**המנהל המסיר:** {responsible_user}\n\n**הרול שהוסר:** {removed_role.mention}", color=discord.Color.red())
+        embed = discord.Embed(title="🔴 רול הוסר ממשתמש", description=f"**המשתמש:** {after.mention}\n**המשנה:** {responsible_user}\n\n**הרול שהוסר:** {removed_role.mention}", color=discord.Color.red())
         embed.set_footer(text="Developed by Aharon the gamer")
         if os.path.exists(BACKGROUND_IMAGE): await log_channel.send(file=discord.File(BACKGROUND_IMAGE, filename="background.png"), embed=embed)
         else: await log_channel.send(embed=embed)
@@ -701,10 +697,16 @@ async def on_guild_role_delete(role: discord.Role):
     embed.set_footer(text="Developed by Aharon the gamer")
     if os.path.exists(BACKGROUND_IMAGE): await log_channel.send(file=discord.File(BACKGROUND_IMAGE, filename="background.png"), embed=embed)
     else: await log_channel.send(embed=embed)
-
 @bot.event
 async def on_ready():
     print(f"✅ Logged in as {bot.user.name}")
     bot.add_view(RoleRequestStarterView())
     bot.add_view(TicketStarterView())
     if not track_fivem_status.is_running(): track_fivem_status.start()
+
+# 🎯 פקודת ההקמה הרשמית והמחברת של הבוט - המנוע שמדליק הכל 24/7!
+if __name__ == "__main__":
+    t = Thread(target=run_flask)
+    t.start()
+    if TOKEN: 
+        bot.run(TOKEN)

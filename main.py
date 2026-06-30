@@ -33,11 +33,11 @@ SAY_PANEL_CHANNEL_ID = 1521623331990933544     # חדר פנל סיי (say-פנ�
 ROLE_PANEL_CHANNEL_ID = 1500997767256870923    # חדר פנל בקשת רולים
 TICKET_PANEL_CHANNEL_ID = 1521555870268260423  # חדר פנל פתיחת טיקטים
 
-# חדרים פנימיים ללוגים ואבטחה
+# חדרים פנימיים ללוגים ואבטחה (ההפרדה המושלמת לפי הקישורים שלך)
 ROLE_APPROVAL_LOG_CHANNEL_ID = 1521554909021868073
-TICKET_LOG_CHANNEL_ID = 1521557178387795999
+TICKET_LOG_CHANNEL_ID = 1521557178387795999    # 🎯 לוגי טיקטים (סגירת פניות)
+SERVER_AUDIT_LOG_CHANNEL_ID = 1521596321721487491 # 🎯 לוגי מערכת כלליים (אבטחה וחדרים)
 ROLE_GIVEN_LOG_CHANNEL_ID = 1521575503448768683 
-SERVER_AUDIT_LOG_CHANNEL_ID = 1521596321721487491 
 
 # משתנה גלובלי לשמירת מצב הלולאה (0 = שחקנים, 1 = סטטוס אונליין/אופליין)
 status_cycle = 0
@@ -279,7 +279,7 @@ class TicketActionButtons(discord.ui.View):
         try:
             msg = await bot.wait_for('message', check=check, timeout=30.0)
             target = None
-            if msg.mentions: target = msg.mentions[0]
+            if msg.mentions: target = msg.mentions
             else:
                 m = re.search(r'\d+', msg.content)
                 if m: target = interaction.guild.get_member(int(m.group()))
@@ -298,15 +298,17 @@ class TicketActionButtons(discord.ui.View):
             async def on_submit(self, inter: discord.Interaction):
                 await inter.response.defer(ephemeral=False)
                 guild = inter.guild
+                
+                # 🎯 ניתוב רשמי ומדויק לחדר הלוגים של הטיקטים ששלחת (1521557178387795999)
                 log_channel = guild.get_channel(TICKET_LOG_CHANNEL_ID)
                 creator = guild.get_member(self.creator_id_val)
 
-                log_embed = discord.Embed(title="🔒 פנייה נסגרה ותועדה במערכת", color=discord.Color.red())
-                log_embed.add_field(name="חדר הטיקט", value=f"`{inter.channel.name}`", inline=True)
-                log_embed.add_field(name="נסגר על ידי", value=inter.user.mention, inline=True)
+                log_embed = discord.Embed(title="🔒 פניית טיקט נסגרה ותועדה במערכת", color=discord.Color.red())
+                log_embed.add_field(name="חדר הטיקט המקורי", value=f"`{inter.channel.name}`", inline=True)
+                log_embed.add_field(name="נסגר על ידי המנהל", value=inter.user.mention, inline=True)
                 log_embed.add_field(name="פתח את הטיקט", value=creator.mention if creator else f"`{self.creator_id_val}`", inline=True)
-                log_embed.add_field(name="מענה", value=self.answered.value, inline=True)
-                log_embed.add_field(name="סיכום", value=f"```{self.summary.value}```", inline=False)
+                log_embed.add_field(name="האם קיבל מענה?", value=self.answered.value, inline=True)
+                log_embed.add_field(name="סיכום ותמצית הטיפול", value=f"```{self.summary.value}```", inline=False)
                 log_embed.set_footer(text="Developed by Aharon the gamer")
                 if os.path.exists(BACKGROUND_IMAGE): log_embed.set_image(url="attachment://background.png")
 
@@ -328,7 +330,7 @@ class TicketDropdown(discord.ui.Select):
 
     async def callback(self, interaction: discord.Interaction):
         guild = interaction.guild
-        ticket_type = self.values[0] # תיקון משיכת האיבר הראשון
+        ticket_type = self.values
         
         overwrites = {guild.default_role: discord.PermissionOverwrite(view_channel=False), interaction.user: discord.PermissionOverwrite(view_channel=True, send_messages=True)}
         staff_role = guild.get_role(STAFF_TICKET_ROLE_ID)
@@ -395,7 +397,7 @@ class SayChannelDropdown(discord.ui.Select):
         has_role = any(role.id == SAY_COMMAND_ROLE_ID for role in interaction.user.roles)
         if not has_role: return await interaction.response.send_message("❌ חסום.", ephemeral=True)
         guild = interaction.guild
-        target_channel = guild.get_channel(int(self.values[0]))
+        target_channel = guild.get_channel(int(self.values))
         if not target_channel: return
         await interaction.response.send_message(f"👮‍♂️ אנא הקלד כעת את המלל באפיק השיחה:", ephemeral=True)
         def check(m): return m.author.id == interaction.user.id and m.channel.id == interaction.channel.id
@@ -453,22 +455,68 @@ async def track_fivem_status():
         await bot.change_presence(activity=discord.Activity(type=discord.ActivityType.watching, name="Online 🟢" if server_online else "Offline 🔴"))
         status_cycle = 0
 
-# 🎯 תיקון לוגי אבטחת חדרים אוטומטיים הרמטי ויציב ללא קריסות!
+# 🎯 🛡️ מערכת לוגי מערכת אוטומטיים - משוגרת הרמטית לחדר הכללי שלך (1521596321721487491)!
 @bot.event
 async def on_guild_channel_create(channel: discord.abc.GuildChannel):
     if channel.guild.id != GUILD_ID: return
     log = channel.guild.get_channel(SERVER_AUDIT_LOG_CHANNEL_ID)
     if log: 
-        try: await log.send(embed=discord.Embed(title="📁 חדר נוצר בשרת", description=f"החדר {channel.mention} נוצר ברגע זה.", color=discord.Color.green()))
-        except: pass
+        embed = discord.Embed(title="📁 חדר נוצר בשרת", description=f"הערוץ/חדר המכונה {channel.mention} נוצר ברגע זה בשרת המשטרה.", color=discord.Color.green())
+        embed.set_footer(text="Developed by Aharon the gamer")
+        if os.path.exists(BACKGROUND_IMAGE):
+            embed.set_image(url="attachment://background.png")
+            try: await log.send(file=discord.File(BACKGROUND_IMAGE, filename="background.png"), embed=embed)
+            except: pass
+        else:
+            try: await log.send(embed=embed)
+            except: pass
 
 @bot.event
 async def on_guild_channel_delete(channel: discord.abc.GuildChannel):
     if channel.guild.id != GUILD_ID: return
     log = channel.guild.get_channel(SERVER_AUDIT_LOG_CHANNEL_ID)
     if log: 
-        try: await log.send(embed=discord.Embed(title="🗑️ חדר נמחק מהשרת", description=f"החדר `{channel.name}` נמחק ברגע זה.", color=discord.Color.red()))
-        except: pass
+        embed = discord.Embed(title="🗑️ חדר נמחק מהשרת", description=f"הערוץ/חדר המכונה `{channel.name}` נמחק לצמיתות ממערכות הדיסקורד.", color=discord.Color.red())
+        embed.set_footer(text="Developed by Aharon the gamer")
+        if os.path.exists(BACKGROUND_IMAGE):
+            embed.set_image(url="attachment://background.png")
+            try: await log.send(file=discord.File(BACKGROUND_IMAGE, filename="background.png"), embed=embed)
+            except: pass
+        else:
+            try: await log.send(embed=embed)
+            except: pass
+
+@bot.event
+async def on_member_update(before: discord.Member, after: discord.Member):
+    if before.guild.id != GUILD_ID: return
+    log = before.guild.get_channel(SERVER_AUDIT_LOG_CHANNEL_ID)
+    if not log: return
+
+    # לוג הענקת רול
+    if len(before.roles) < len(after.roles):
+        new_role = next(role for role in after.roles if role not in before.roles)
+        embed = discord.Embed(title="🟢 רול הוענק למשתמש בשרת", description=f"**המשתמש שקיבל:** {after.mention}\n**הרול שהוענק:** {new_role.mention}", color=discord.Color.green())
+        embed.set_footer(text="Developed by Aharon the gamer")
+        if os.path.exists(BACKGROUND_IMAGE):
+            embed.set_image(url="attachment://background.png")
+            try: await log.send(file=discord.File(BACKGROUND_IMAGE, filename="background.png"), embed=embed)
+            except: pass
+        else:
+            try: await log.send(embed=embed)
+            except: pass
+
+    # לוג הסרת רול
+    elif len(before.roles) > len(after.roles):
+        removed_role = next(role for role in before.roles if role not in after.roles)
+        embed = discord.Embed(title="🔴 רול הוסר ממשתמש בשרת", description=f"**המשתמש:** {after.mention}\n**הרול שהוסר:** {removed_role.mention}", color=discord.Color.red())
+        embed.set_footer(text="Developed by Aharon the gamer")
+        if os.path.exists(BACKGROUND_IMAGE):
+            embed.set_image(url="attachment://background.png")
+            try: await log.send(file=discord.File(BACKGROUND_IMAGE, filename="background.png"), embed=embed)
+            except: pass
+        else:
+            try: await log.send(embed=embed)
+            except: pass
 @bot.event
 async def on_ready():
     print(f"✅ Logged in as {bot.user.name}")

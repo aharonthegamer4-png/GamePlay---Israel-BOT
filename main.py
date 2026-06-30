@@ -31,6 +31,7 @@ ROLE_PANEL_CHANNEL_ID = 1500997767256870923
 ROLE_APPROVAL_LOG_CHANNEL_ID = 1521554909021868073
 TICKET_PANEL_CHANNEL_ID = 1521555870268260423
 TICKET_LOG_CHANNEL_ID = 1521557178387795999
+ROLE_GIVEN_LOG_CHANNEL_ID = 1521575503448768683 # 🎯 חדר לוג נתינת רולים החדש שביקשת!
 
 # משתנה גלובלי לשמירת מצב הלולאה (0 = שחקנים, 1 = סטטוס אונליין/אופליין)
 status_cycle = 0
@@ -117,7 +118,7 @@ class RoleRequestModal(discord.ui.Modal, title="טופס הגשת בקשת רו�
         )
         if os.path.exists(BACKGROUND_IMAGE):
             embed.set_image(url="attachment://background.png")
-        embed.set_footer(text="לחץ על הכפתור הירוק למטה לבחירת רולים והענקתם")
+        embed.set_footer(text="בחרו רול מתוך התפריט למטה כדי להעניק ולנעול את הפנייה במכה אחת")
 
         view = RoleApprovalView(interaction.user.id)
         
@@ -139,7 +140,7 @@ class DynamicRoleSelect(discord.ui.Select):
     def __init__(self, target_user_id: int):
         self.target_user_id = target_user_id
         super().__init__(
-            placeholder="בחר רולים להענקה (ניתן לבחור כמה רולים יחד)...",
+            placeholder="בחר רולים להענקה ולנעילת הפנייה...",
             min_values=1,
             max_values=15,
             custom_id="dynamic_role_selector_spec"
@@ -153,7 +154,6 @@ class DynamicRoleSelect(discord.ui.Select):
             return await interaction.followup.send("שגיאה: המשתמש לא נמצא בשרת.", ephemeral=True)
 
         added_roles = []
-        # לוגיקה אגרסיבית להענקת דרגות ללא חסימות תפקיד פנימיות
         for role_id_str in self.values:
             role = guild.get_role(int(role_id_str))
             if role:
@@ -164,10 +164,45 @@ class DynamicRoleSelect(discord.ui.Select):
                     pass
 
         if not added_roles:
-            return await interaction.followup.send("❌ שגיאה: לא ניתן להעניק את הרולים. ודא שרול הבוט נמצא בטופ של רשימת הרולים בשרת!", ephemeral=True)
+            return await interaction.followup.send("❌ שגיאה: לא ניתן להעניק את הרולים. ודא שרול הבוט נמצא בטופ של רשימת הרולים!", ephemeral=True)
 
         roles_list = ", ".join(added_roles)
-        await interaction.followup.send(f"🎖️ הדרגות הבאות הוענקו בהצלחה ל-{target.mention}:\n**{roles_list}**", ephemeral=True)
+        
+        # 🔒 שלב 1: נעילת הודעת הפנל המקורית על ידי מחיקת הכפתורים והתפריט לחלוטין כדי למנוע לחיצות נוספות
+        old_embed = interaction.message.embeds[0]
+        locked_embed = discord.Embed(
+            title="🔒 פניית בקשת רולים טופלה וננעלה",
+            description=old_embed.description,
+            color=discord.Color.green()
+        )
+        if os.path.exists(BACKGROUND_IMAGE):
+            locked_embed.set_image(url="attachment://background.png")
+            
+        locked_embed.add_field(name="🛡️ סטטוס מערכת", value="✅ הרולים הוענקו, פנל השליטה הושבת וננעל לחלוטין.", inline=False)
+        locked_embed.add_field(name="👮‍♂️ מנהל מטפל", value=interaction.user.mention, inline=True)
+        locked_embed.add_field(name="👤 המשתמש שקיבל", value=target.mention, inline=True)
+        await interaction.message.edit(embed=locked_embed, view=None)
+
+        # 📄 שלב 2: שליחת הלוג החדש, המפורט והמעוצב לחדר הלוגים שביקשת!
+        log_channel = guild.get_channel(ROLE_GIVEN_LOG_CHANNEL_ID)
+        if log_channel:
+            given_embed = discord.Embed(
+                title="🎖️ לוג רשמי - הענקת דרגות ורולים",
+                description=(
+                    f"**המנהל המאשר:** {interaction.user.mention} (`{interaction.user.id}`)\n"
+                    f"**המשתמש שקיבל:** {target.mention} (`{target.id}`)\n\n"
+                    f"**הרולים שהוענקו בהצלחה:**\n```{roles_list}```"
+                ),
+                color=0x1a73e8
+            )
+            if os.path.exists(BACKGROUND_IMAGE):
+                given_embed.set_image(url="attachment://background.png")
+                file_log = discord.File(BACKGROUND_IMAGE, filename="background.png")
+                await log_channel.send(file=file_log, embed=given_embed)
+            else:
+                await log_channel.send(embed=given_embed)
+
+        await interaction.followup.send(f"🎖️ הדרגות הבאות הוענקו בהצלחה והלוגים ננעלו ונשלחו:\n**{roles_list}**", ephemeral=True)
 
     async def _populate_options(self, guild: discord.Guild):
         options = []
@@ -219,24 +254,19 @@ class RoleApprovalView(discord.ui.View):
         guild = interaction.guild
         target = guild.get_member(self.target_user_id)
         
-        # שלב 1: עדכון תוכן ההודעה המקורית והפיכתה ללוג קבוע ונעול
-        old_embed = interaction.message.embeds[0]
-        new_embed = discord.Embed(
-            title="🔒 פניית בקשת רולים ננעלה ואושרה",
+        old_embed = interaction.message.embeds
+        locked_embed = discord.Embed(
+            title="🔒 פניית בקשת רולים נסגרה ידנית",
             description=old_embed.description,
             color=discord.Color.green()
         )
-        if old_embed.image:
-            new_embed.set_image(url="attachment://background.png")
+        if os.path.exists(BACKGROUND_IMAGE): locked_embed.set_image(url="attachment://background.png")
             
         target_mention = target.mention if target else f"`{self.target_user_id}`"
-        new_embed.add_field(name="🛡️ סטטוס פנייה", value=f"✅ אושר ונסגר בהצלחה על ידי {interaction.user.mention}!", inline=False)
-        new_embed.add_field(name="👮‍♂️ מנהל מאשר", value=interaction.user.mention, inline=True)
-        new_embed.add_field(name="👤 משתמש שקיבל", value=target_mention, inline=True)
+        locked_embed.add_field(name="🛡️ סטטוס פנייה", value=f"✅ נסגר ידנית על ידי {interaction.user.mention}!", inline=False)
         
-        # שלב 2: הסרת כל הכפתורים ותפריט הבחירה מההודעה כדי לנעול אותה
-        await interaction.message.edit(embed=new_embed, view=None)
-        await interaction.response.send_message("✅ הפנייה ננעלה בהצלחה ותפריט השליטה הוסר מהערוץ!", ephemeral=True)
+        await interaction.message.edit(embed=locked_embed, view=None)
+        await interaction.response.send_message("✅ הפנייה נסגרה ותפריט השליטה הוסר מהערוץ!", ephemeral=True)
         self.stop()
 
 class RoleRequestStarterView(discord.ui.View):
@@ -275,7 +305,6 @@ class TicketActionButtons(discord.ui.View):
             async def on_submit(self, inter: discord.Interaction):
                 await inter.response.defer(ephemeral=True)
                 await inter.channel.edit(name=self.new_name.value)
-                await inter.followup.send(f"✅ שם החדר השתנה בהצלחה ל-`{self.new_name.value}`!", ephemeral=True)
         await interaction.response.send_modal(RenameModal())
 
     @discord.ui.button(label="הוספת משתמש", style=discord.ButtonStyle.secondary, emoji="➕", custom_id="ticket_add_user")
@@ -286,19 +315,16 @@ class TicketActionButtons(discord.ui.View):
         try:
             msg = await bot.wait_for('message', check=check, timeout=30.0)
             if msg.mentions:
-                target_user = msg.mentions[0]
-                await interaction.channel.set_permissions(target_user, view_channel=True, send_messages=True)
-                await interaction.channel.send(f"✅ המשתמש {target_user.mention} נוסף בהצלחה לשיחת הטיקט על ידי {interaction.user.mention}!")
-            else:
-                await interaction.channel.send("❌ לא זוהה תיוג תקין של משתמש. הפעולה בבוטלה.")
+                await interaction.channel.set_permissions(msg.mentions, view_channel=True, send_messages=True)
+                await interaction.channel.send(f"✅ המשתמש {msg.mentions.mention} נוסף בהצלחה לשיחת הטיקט על ידי {interaction.user.mention}!")
         except asyncio.TimeoutError:
             await interaction.channel.send("❌ עבר הזמן המוקצב להוספת משתמש. אנא לחץ שוב.")
 
     @discord.ui.button(label="סגירת הפנייה", style=discord.ButtonStyle.danger, emoji="🔒", custom_id="ticket_close_main")
     async def close_ticket_panel(self, interaction: discord.Interaction, button: discord.ui.Button):
-        class TicketCloseModal(discord.ui.Modal, title="סיכום וסגירת טיקט - GamePlay IL"):
-            summary = discord.ui.TextInput(label="פירוט תמציתי של מה שהיה בטיקט", style=discord.TextStyle.long, required=True, placeholder="סיכום הטיפול בפנייה...")
-            answered = discord.ui.TextInput(label="האם הטיקט קיבל מענה ופתרון מלא? (כן / לא)", style=discord.TextStyle.short, required=True, placeholder="כן / לא")
+        class TicketCloseModal(discord.ui.Modal, title="סיכום וסגירת טיקט"):
+            summary = discord.ui.TextInput(label="פירוט תמציתי של מה שהיה בטיקט", style=discord.TextStyle.long, required=True)
+            answered = discord.ui.TextInput(label="האם הטיקט קיבל מענה מלא? (כן / לא)", required=True)
 
             def __init__(self, creator_id: int):
                 super().__init__()
@@ -306,7 +332,6 @@ class TicketActionButtons(discord.ui.View):
 
             async def on_submit(self, inter: discord.Interaction):
                 await inter.response.defer(ephemeral=False)
-                await inter.channel.send("🔒 הטיקט מסוכם וייסגר בעוד כ-5 שניות...")
                 guild = inter.guild
                 log_channel = guild.get_channel(TICKET_LOG_CHANNEL_ID)
                 creator = guild.get_member(self.creator_id)
@@ -315,15 +340,13 @@ class TicketActionButtons(discord.ui.View):
                 log_embed.add_field(name="חדר הטיקט", value=f"`{inter.channel.name}`", inline=True)
                 log_embed.add_field(name="נסגר על ידי", value=inter.user.mention, inline=True)
                 log_embed.add_field(name="פתח את הטיקט", value=creator.mention if creator else f"`{self.creator_id}`", inline=True)
-                log_embed.add_field(name="האם קיבל מענה?", value=f"**{self.answered.value}**", inline=True)
+                log_embed.add_field(name="מענה", value=self.answered.value, inline=True)
                 log_embed.add_field(name="סיכום הטיפול בפנייה", value=f"```{self.summary.value}```", inline=False)
-                if os.path.exists(BACKGROUND_IMAGE):
-                    log_embed.set_image(url="attachment://background.png")
+                if os.path.exists(BACKGROUND_IMAGE): log_embed.set_image(url="attachment://background.png")
 
                 if log_channel:
                     if os.path.exists(BACKGROUND_IMAGE):
-                        file_log = discord.File(BACKGROUND_IMAGE, filename="background.png")
-                        await log_channel.send(file=file_log, embed=log_embed)
+                        await log_channel.send(file=discord.File(BACKGROUND_IMAGE, filename="background.png"), embed=log_embed)
                     else:
                         await log_channel.send(embed=log_embed)
                 await asyncio.sleep(5)
@@ -341,34 +364,20 @@ class TicketDropdown(discord.ui.Select):
 
     async def callback(self, interaction: discord.Interaction):
         guild = interaction.guild
-        ticket_type = self.values[0]
+        ticket_type = self.values
         
-        overwrites = {
-            guild.default_role: discord.PermissionOverwrite(view_channel=False),
-            interaction.user: discord.PermissionOverwrite(view_channel=True, send_messages=True, attach_files=True)
-        }
+        overwrites = {guild.default_role: discord.PermissionOverwrite(view_channel=False), interaction.user: discord.PermissionOverwrite(view_channel=True, send_messages=True, attach_files=True)}
         staff_role = guild.get_role(STAFF_TICKET_ROLE_ID)
-        if staff_role:
-            overwrites[staff_role] = discord.PermissionOverwrite(view_channel=True, send_messages=True)
+        if staff_role: overwrites[staff_role] = discord.PermissionOverwrite(view_channel=True, send_messages=True)
 
         channel = await guild.create_text_channel(name=f"{ticket_type.replace(' ', '-')}-{interaction.user.name}", overwrites=overwrites)
-        
-        embed = discord.Embed(
-            title=f"🎫 פנייה חדשה בנושא: {ticket_type}",
-            description=f"שלום {interaction.user.mention},\nצוות הטיקטים קיבל את פנייתך ויהיה איתך בהקדם. אנא פרט את הסיבה בחדר זה בשביל לקבל מענה מהיר.",
-            color=0x2f3136
-        )
-        if os.path.exists(BACKGROUND_IMAGE):
-            embed.set_image(url="attachment://background.png")
-        embed.set_footer(text="GamePlay IL Support View")
+        embed = discord.Embed(title=f"🎫 פנייה חדשה בנושא: {ticket_type}", description="צוות הטיקטים יהיה איתך בהקדם.", color=0x2f3136)
+        if os.path.exists(BACKGROUND_IMAGE): embed.set_image(url="attachment://background.png")
 
-        view = TicketActionButtons(interaction.user.id)
-        
         if os.path.exists(BACKGROUND_IMAGE):
-            file_t = discord.File(BACKGROUND_IMAGE, filename="background.png")
-            await channel.send(file=file_t, embed=embed, view=view)
+            await channel.send(file=discord.File(BACKGROUND_IMAGE, filename="background.png"), embed=embed, view=TicketActionButtons(interaction.user.id))
         else:
-            await channel.send(embed=embed, view=view)
+            await channel.send(embed=embed, view=TicketActionButtons(interaction.user.id))
         await interaction.response.send_message(f"✅ הטיקט שלך נפתח בהצלחה בערוץ: {channel.mention}", ephemeral=True)
 
 class TicketStarterView(discord.ui.View):
@@ -384,22 +393,14 @@ class TicketStarterView(discord.ui.View):
 async def setup_role_panel_cmd(ctx):
     guild = ctx.guild
     channel = guild.get_channel(ROLE_PANEL_CHANNEL_ID)
-    if not channel:
-        return await ctx.send("❌ חדר פנל הרולים לא נמצא במערכת.")
+    if not channel: return await ctx.send("❌ חדר פנל הרולים לא נמצא.")
     
-    embed = discord.Embed(
-        title="🎖️ מחלקת משטרת GamePlay-IL | בקשת דרגות ורולים",
-        description="ברוכים הבאים למרכז השליטה. לחצו על הכפתור למטה ומלאו את הפרטים במדויק.",
-        color=0x1a73e8
-    )
-    if os.path.exists(BACKGROUND_IMAGE):
-        embed.set_image(url="attachment://background.png")
-    embed.set_footer(text="GamePlay IL Security System")
+    embed = discord.Embed(title="🎖️ מחלקת משטרת GamePlay-IL | בקשת דרגות ורולים", description="לחצו על הכפתור למטה ומלאו את הפרטים במדויק.", color=0x1a73e8)
+    if os.path.exists(BACKGROUND_IMAGE): embed.set_image(url="attachment://background.png")
     
     view = RoleRequestStarterView()
     if os.path.exists(BACKGROUND_IMAGE):
-        file = discord.File(BACKGROUND_IMAGE, filename="background.png")
-        await channel.send(file=file, embed=embed, view=view)
+        await channel.send(file=discord.File(BACKGROUND_IMAGE, filename="background.png"), embed=embed, view=view)
     else:
         await channel.send(embed=embed, view=view)
     await ctx.send(f"✅ פנל בקשת הרולים הוקם בהצלחה בחדר {channel.mention}!")
@@ -409,22 +410,14 @@ async def setup_role_panel_cmd(ctx):
 async def setup_ticket_panel_cmd(ctx):
     guild = ctx.guild
     channel = guild.get_channel(TICKET_PANEL_CHANNEL_ID)
-    if not channel:
-        return await ctx.send("❌ חדר פנל הטיקטים לא נמצא במערכת.")
+    if not channel: return await ctx.send("❌ חדר פנל הטיקטים לא נמצא.")
     
-    embed = discord.Embed(
-        title="🎫 מחלקת משטרת GamePlay-IL | פתיחת פניות ותמיכה",
-        description="בחרו את קטגוריית הפנייה המתאימה מתוך התפריט הנפתח למטה והבוט יפתח לכם חדר אישי.",
-        color=0x1a73e8
-    )
-    if os.path.exists(BACKGROUND_IMAGE):
-        embed.set_image(url="attachment://background.png")
-    embed.set_footer(text="GamePlay IL Global Support")
+    embed = discord.Embed(title="🎫 מחלקת משטרת GamePlay-IL | פתיחת פניות ותמיכה", description="בחרו את קטגוריית הפנייה המתאימה מתוך התפריט.", color=0x1a73e8)
+    if os.path.exists(BACKGROUND_IMAGE): embed.set_image(url="attachment://background.png")
     
     view = TicketStarterView()
     if os.path.exists(BACKGROUND_IMAGE):
-        file_panel = discord.File(BACKGROUND_IMAGE, filename="background.png")
-        await channel.send(file=file_panel, embed=embed, view=view)
+        await channel.send(file=discord.File(BACKGROUND_IMAGE, filename="background.png"), embed=embed, view=view)
     else:
         await channel.send(embed=embed, view=view)
     await ctx.send(f"✅ פנל הטיקטים המעוצב הוקם בהצלחה בחדר {channel.mention}!")
@@ -443,15 +436,13 @@ async def track_fivem_status():
         with urllib.request.urlopen(req, timeout=4) as response:
             players_count = len(json.loads(response.read().decode()))
             server_online = True
-    except Exception:
-        server_online = False
+    except Exception: server_online = False
     try:
         info_url = f"http://{SERVER_IP}:{SERVER_PORT}/info.json"
         info_req = urllib.request.Request(info_url, headers={'User-Agent': 'Mozilla/5.0'})
         with urllib.request.urlopen(info_req, timeout=4) as info_response:
             max_players = int(json.loads(info_response.read().decode()).get('sv_maxclients', 5))
-    except Exception:
-        pass
+    except Exception: pass
         
     if status_cycle == 0:
         status_text = f"{players_count}/{max_players} שחקנים" if server_online else "0/5"
@@ -464,10 +455,8 @@ async def track_fivem_status():
 async def setup_dynamic_selects(guild: discord.Guild, view: RoleApprovalView):
     for item in view.children:
         if isinstance(item, DynamicRoleSelect):
-            try:
-                await item._populate_options(guild)
-            except Exception:
-                pass
+            try: await item._populate_options(guild)
+            except Exception: pass
 
 # ==========================================
 # ⚙️ הפעלת הבוט ואיפוס פקודות סופי
@@ -478,17 +467,13 @@ async def on_ready():
     print("------")
     bot.add_view(RoleRequestStarterView())
     bot.add_view(TicketStarterView())
-    
-    if not track_fivem_status.is_running():
-        track_fivem_status.start()
+    if not track_fivem_status.is_running(): track_fivem_status.start()
         
     try:
-        # ניקוי מוחלט של פקודות הסלאש הרשומות מהטוקן הזה כדי שלא יישאר שום זכר לבוט 67 הישן
         bot.tree.clear_commands(guild=None)
         await bot.tree.sync(guild=None)
         print("🧹 Cleared all global slash commands successfully.")
-    except Exception as e:
-        print(f"Failed to clear commands: {e}")
+    except Exception as e: print(f"Failed to clear commands: {e}")
 
 if __name__ == "__main__":
     t = Thread(target=run_flask)

@@ -576,7 +576,7 @@ async def setup_ticket_panel_cmd(ctx):
     try: await ctx.message.delete()
     except Exception: pass
 # ==========================================
-# 📢 פקודת SAY הרשמית - תומכת ב-say, SAY ו-Say דרך דיסקורד בצורה ישירה!
+# 📢 פקדת SAY הרשמית - קוראת את כל סוגי השמות (say, SAY, Say) בלייב!
 # ==========================================
 @bot.command(name="say", aliases=["SAY", "Say"])
 async def say_command(ctx, *, message: str = None):
@@ -587,7 +587,10 @@ async def say_command(ctx, *, message: str = None):
     if not message:
         return await ctx.send(f"❌ שגיאה: אנא רשום טקסט לאחר הפקודה.", delete_after=5)
 
-    try: await ctx.message.delete() # מוחק מיד את הודעת ה-! המשבשת שלכם מהערוץ
+    try: await ctx.author.guild.get_member(ctx.author.id) # וידוא נוכחות של המנהל המריץ
+    except: pass
+
+    try: await ctx.message.delete() # מוחק את הפקודה המקורית שלך בצ'אט
     except Exception: pass
 
     embed = discord.Embed(description=message, color=0x1a73e8)
@@ -705,7 +708,7 @@ async def on_guild_role_delete(role: discord.Role):
     if os.path.exists(BACKGROUND_IMAGE): await log_channel.send(file=discord.File(BACKGROUND_IMAGE, filename="background.png"), embed=embed)
     else: await log_channel.send(embed=embed)
 
-# 📁 מנגנון לוגי החדרים האוטומטי (יצירה ומחיקה)
+# 📁 מנגנון לוגי החדרים האוטומטי שביקשת (יצירה ומחיקה)
 @bot.event
 async def on_guild_channel_create(channel: discord.abc.GuildChannel):
     if channel.guild.id != GUILD_ID: return

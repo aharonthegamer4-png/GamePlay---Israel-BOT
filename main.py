@@ -65,7 +65,6 @@ async def send_log(guild, channel_name, embed):
         channel = discord.utils.get(category.text_channels, name=channel_name)
         if channel:
             await channel.send(embed=embed)
-
 # ==========================================
 # 🛡️ מערכת אימות (VERIFY SYSTEM)
 # ==========================================
@@ -95,7 +94,6 @@ class StatusView(discord.ui.View):
     @discord.ui.button(label="צפה ברשימת שחקנים", style=discord.ButtonStyle.blurple, emoji="👥", custom_id="status_players_btn")
     async def view_players(self, interaction: discord.Interaction, button: discord.ui.Button):
         await interaction.response.send_message("🔍 טוען את רשימת השחקנים המחוברים...", ephemeral=True)
-
 # ==========================================
 # 🎖️ מערכת פנל רולים ואישורים (ROLE REQUEST SYSTEM)
 # ==========================================
@@ -144,7 +142,6 @@ class RoleRequestModal(discord.ui.Modal, title="טופס הגשת בקשת רו�
             await log_channel.send(embed=embed, view=view)
             
         await interaction.followup.send("✅ הטופס נשלח בהצלחה לחדר אישורי ההנהלה! אנא המתן לאישור הבקשה.", ephemeral=True)
-
 class DynamicRoleSelect(discord.ui.Select):
     def __init__(self, target_user_id: int):
         self.target_user_id = target_user_id
@@ -310,7 +307,6 @@ class TicketActionButtons(discord.ui.View):
                 await asyncio.sleep(5)
                 await inter.channel.delete()
         await interaction.response.send_modal(TicketCloseModal(self.creator_id))
-
 class TicketDropdown(discord.ui.Select):
     def __init__(self):
         options = [
@@ -471,10 +467,14 @@ async def reset_logs(interaction: discord.Interaction):
     old_category = discord.utils.get(guild.categories, name="LOGS")
     if old_category:
         for channel in old_category.text_channels:
-            try: await channel.delete()
-            except Exception: pass
-        try: await old_category.delete()
-            except Exception: pass
+            try:
+                await channel.delete()
+            except Exception:
+                pass
+        try:
+            await old_category.delete()
+        except Exception:
+            pass
     overwrites = {
         guild.default_role: discord.PermissionOverwrite(view_channel=False),
         staff_role: discord.PermissionOverwrite(view_channel=True, send_messages=False)
@@ -485,7 +485,6 @@ async def reset_logs(interaction: discord.Interaction):
         await guild.create_text_channel(name=ch_name, category=new_category)
         created_count += 1
     await interaction.followup.send(f"🧹 קטגוריית LOGS הוקמה מחדש מאפס עם {created_count} חדרים.", ephemeral=True)
-
 # ==========================================
 # 📊 משימה אוטומטית ברקע - פנייה ישירה ל-FiveM (מתחלף כל 30 שניות)
 # ==========================================
@@ -493,7 +492,8 @@ async def reset_logs(interaction: discord.Interaction):
 async def track_fivem_status():
     global status_cycle
     guild = bot.get_guild(GUILD_ID)
-    if not guild: return
+    if not guild: 
+        return
     players_count, max_players, server_online = 0, 5, False
     try:
         url = f"http://{SERVER_IP}:{SERVER_PORT}/players.json"
@@ -501,12 +501,15 @@ async def track_fivem_status():
         with urllib.request.urlopen(req, timeout=4) as response:
             players_count = len(json.loads(response.read().decode()))
             server_online = True
+    except Exception:
+        server_online = False
+    try:
         info_url = f"http://{SERVER_IP}:{SERVER_PORT}/info.json"
         info_req = urllib.request.Request(info_url, headers={'User-Agent': 'Mozilla/5.0'})
         with urllib.request.urlopen(info_req, timeout=4) as info_response:
             max_players = int(json.loads(info_response.read().decode()).get('sv_maxclients', 5))
     except Exception:
-        server_online = False
+        pass
     if status_cycle == 0:
         status_text = f"{players_count}/{max_players} שחקנים" if server_online else "0/5"
         status_cycle = 1
@@ -518,7 +521,10 @@ async def track_fivem_status():
 async def setup_dynamic_selects(guild: discord.Guild, view: RoleApprovalView):
     for item in view.children:
         if isinstance(item, DynamicRoleSelect):
-            await item._populate_options(guild)
+            try:
+                await item._populate_options(guild)
+            except Exception:
+                pass
 
 # ==========================================
 # ⚙️ הפעלת הבוט וסנכרון פקודות
@@ -542,4 +548,5 @@ async def on_ready():
 if __name__ == "__main__":
     t = Thread(target=run_flask)
     t.start()
-    if TOKEN: bot.run(TOKEN)
+    if TOKEN: 
+        bot.run(TOKEN)

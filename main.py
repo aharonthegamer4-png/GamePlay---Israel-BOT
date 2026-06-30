@@ -22,7 +22,6 @@ BACKGROUND_IMAGE = "background.png"
 GUILD_ID = 1500997764169863271
 
 # רולים
-CITIZEN_ROLE_ID = 1514394547554226388  # רול האזרח
 ROLE_APPROVER_ID = 1521553580148916325 # הרול שיכול לאשר את נתינת הרולים
 STAFF_TICKET_ROLE_ID = 1521554756626157788 # רול הצוות שיכול לנהל טיקטים
 
@@ -32,14 +31,6 @@ ROLE_PANEL_CHANNEL_ID = 1500997767256870923
 ROLE_APPROVAL_LOG_CHANNEL_ID = 1521554909021868073
 TICKET_PANEL_CHANNEL_ID = 1521555870268260423
 TICKET_LOG_CHANNEL_ID = 1521557178387795999
-
-# שמות ערוצי הלוגים בקטגוריית LOGS
-LOG_CHANNELS = [
-    "leave-logs", "ban-logs", "create-channel-logs", "delete-channel-logs",
-    "manage-roles", "create-role", "delete-role", "ticket-open-logs",
-    "ticket-close-logs", "update-message-logs", "add-role-logs",
-    "remove-role-logs", "delete-message-logs"
-]
 
 # משתנה גלובלי לשמירת מצב הלולאה (0 = שחקנים, 1 = סטטוס אונליין/אופליין)
 status_cycle = 0
@@ -55,45 +46,42 @@ def home():
 
 def run_flask():
     app.run(host='0.0.0.0', port=8080)
+# ==========================================
+# 👋 מערכת ברוכים הבאים (WELCOME SYSTEM)
+# ==========================================
+@bot.event
+async def on_member_join(member: discord.Member):
+    if member.guild.id != GUILD_ID:
+        return
+        
+    channel = member.guild.get_channel(WELCOME_CHANNEL_ID)
+    if not channel:
+        return
 
-# ==========================================
-# 📋 פונקציות עזר למערכת הלוגים
-# ==========================================
-async def send_log(guild, channel_name, embed):
-    category = discord.utils.get(guild.categories, name="LOGS")
-    if category:
-        channel = discord.utils.get(category.text_channels, name=channel_name)
-        if channel:
-            await channel.send(embed=embed)
-# ==========================================
-# 🛡️ מערכת אימות (VERIFY SYSTEM)
-# ==========================================
-class VerifyButton(discord.ui.View):
-    def __init__(self):
-        super().__init__(timeout=None)
+    embed = discord.Embed(
+        title="✨ חבר חדש הצטרף למחלקת המשטרה!",
+        description=(
+            f"ברוך הבא {member.mention} אל השרת הרשמי של **GamePlay IL**!\n\n"
+            f"➔ אתה החבר ה-**{len(member.guild.members)}** בקהילה.\n"
+            f"➔ אנא היכנס לערוץ האימות או פתח פנייה לקבלת דרגות שירות."
+        ),
+        color=0x1a73e8
+    )
+    
+    if os.path.exists(BACKGROUND_IMAGE):
+        file = discord.File(BACKGROUND_IMAGE, filename="background.png")
+        embed.set_image(url="attachment://background.png")
+        
+    if member.avatar:
+        embed.set_thumbnail(url=member.avatar.url)
+        
+    embed.set_footer(text=f"GamePlay IL | Security & Automation Engine", icon_url=member.guild.icon.url if member.guild.icon else None)
 
-    @discord.ui.button(label="להתחלת אימות / Verify", style=discord.ButtonStyle.success, emoji="🛡️", custom_id="verify_btn_67")
-    async def verify(self, interaction: discord.Interaction, button: discord.ui.Button):
-        role = interaction.guild.get_role(VERIFY_ROLE_ID)
-        if not role:
-            return await interaction.response.send_message("שגיאה: רול האימות לא נמצא בשרת.", ephemeral=True)
+    if os.path.exists(BACKGROUND_IMAGE):
+        await channel.send(file=file, embed=embed, content=f"היי {member.mention}, ברוך הבא! 👮‍♂️💎")
+    else:
+        await channel.send(embed=embed, content=f"היי {member.mention}, ברוך הבא! 👮‍♂️💎")
 
-        if role in interaction.user.roles:
-            await interaction.response.send_message("אתה כבר מאומת במערכת! 🧭", ephemeral=True)
-        else:
-            await interaction.user.add_roles(role)
-            await interaction.response.send_message(f"האימות בוצע בהצלחה! קיבלת את הרול **{role.name}** ✨", ephemeral=True)
-
-# ==========================================
-# 🎮 מערכת סטטוס שרת אוטומטית (SERVER STATUS)
-# ==========================================
-class StatusView(discord.ui.View):
-    def __init__(self):
-        super().__init__(timeout=None)
-
-    @discord.ui.button(label="צפה ברשימת שחקנים", style=discord.ButtonStyle.blurple, emoji="👥", custom_id="status_players_btn")
-    async def view_players(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await interaction.response.send_message("🔍 טוען את רשימת השחקנים המחוברים...", ephemeral=True)
 # ==========================================
 # 🎖️ מערכת פנל רולים ואישורים (ROLE REQUEST SYSTEM)
 # ==========================================
@@ -142,6 +130,7 @@ class RoleRequestModal(discord.ui.Modal, title="טופס הגשת בקשת רו�
             await log_channel.send(embed=embed, view=view)
             
         await interaction.followup.send("✅ הטופס נשלח בהצלחה לחדר אישורי ההנהלה! אנא המתן לאישור הבקשה.", ephemeral=True)
+
 class DynamicRoleSelect(discord.ui.Select):
     def __init__(self, target_user_id: int):
         self.target_user_id = target_user_id
@@ -307,6 +296,7 @@ class TicketActionButtons(discord.ui.View):
                 await asyncio.sleep(5)
                 await inter.channel.delete()
         await interaction.response.send_modal(TicketCloseModal(self.creator_id))
+
 class TicketDropdown(discord.ui.Select):
     def __init__(self):
         options = [
@@ -385,31 +375,8 @@ class CitizenPanelButtons(discord.ui.View):
         await interaction.response.send_message(f"🎮 קישור חיבור ישיר לשרת FiveM: `cfx.re/join/am35ok`", ephemeral=True)
 
 # ==========================================
-# 🛠️ פקודות סלאש להקמת המערכות
+# 🛠️ פקודות סלאש להקמת המערכות המבוקשות בלבד
 # ==========================================
-@bot.tree.command(name="setup_verify", description="יוצר חדר ייעודי ומציב את מערכת האימות המעוצבת")
-@app_commands.checks.has_permissions(administrator=True)
-async def setup_verify(interaction: discord.Interaction):
-    await interaction.response.defer(ephemeral=True)
-    guild = interaction.guild
-    category = discord.utils.get(guild.categories, name="ーー 🌟 ברוכים הבאים 🌟 ーー")
-    if not category:
-        category = await guild.create_category(name="ーー 🌟 ברוכים הבאים 🌟 ーー")
-    channel = discord.utils.get(category.text_channels, name="verification")
-    if not channel:
-        channel = await guild.create_text_channel(name="verification", category=category)
-    if not os.path.exists(BACKGROUND_IMAGE):
-        return await interaction.followup.send("שגיאה: קובץ background.png לא נמצא.", ephemeral=True)
-    gif_file = discord.File(BACKGROUND_IMAGE, filename="background.png")
-    embed = discord.Embed(
-        title="🛡️ מערכת אימות הגנה - שרת 67",
-        description="ברוכים הבאים לשרת! לחצו על הכפתור הירוק למטה כדי להתחיל אימות.",
-        color=0x2f3136
-    )
-    embed.set_image(url="attachment://background.png")
-    await channel.send(file=gif_file, embed=embed, view=VerifyButton())
-    await interaction.followup.send("✅ מערכת האימות הוצבה בהצלחה!", ephemeral=True)
-
 @bot.tree.command(name="setup_role_panel", description="מקים אוטומטית את פנל בקשת הדרגות והרולים")
 @app_commands.checks.has_permissions(administrator=True)
 async def setup_role_panel(interaction: discord.Interaction):
@@ -418,6 +385,7 @@ async def setup_role_panel(interaction: discord.Interaction):
     channel = guild.get_channel(ROLE_PANEL_CHANNEL_ID)
     if not channel:
         return await interaction.followup.send("חדר פנל הרולים לא נמצא במערכת.", ephemeral=True)
+    
     embed = discord.Embed(
         title="🎖️ מחלקת משטרת GamePlay-IL | בקשת דרגות ורולים",
         description="ברוכים הבאים למרכז השליטה. לחצו על הכפתור למטה ומלאו את הפרטים במדויק.",
@@ -425,6 +393,8 @@ async def setup_role_panel(interaction: discord.Interaction):
     )
     if os.path.exists(BACKGROUND_IMAGE):
         embed.set_image(url="attachment://background.png")
+    embed.set_footer(text="GamePlay IL Security System")
+    
     view = RoleRequestStarterView()
     if os.path.exists(BACKGROUND_IMAGE):
         file = discord.File(BACKGROUND_IMAGE, filename="background.png")
@@ -441,6 +411,7 @@ async def setup_ticket_panel(interaction: discord.Interaction):
     channel = guild.get_channel(TICKET_PANEL_CHANNEL_ID)
     if not channel:
         return await interaction.followup.send("חדר פנל הטיקטים לא נמצא במערכת.", ephemeral=True)
+    
     embed = discord.Embed(
         title="🎫 מחלקת משטרת GamePlay-IL | פתיחת פניות ותמיכה",
         description="בחרו את קטגוריית הפנייה המתאימה מתוך התפריט הנפתח למטה והבוט יפתח לכם חדר אישי.",
@@ -448,6 +419,8 @@ async def setup_ticket_panel(interaction: discord.Interaction):
     )
     if os.path.exists(BACKGROUND_IMAGE):
         embed.set_image(url="attachment://background.png")
+    embed.set_footer(text="GamePlay IL Global Support")
+    
     view = TicketStarterView()
     if os.path.exists(BACKGROUND_IMAGE):
         file_panel = discord.File(BACKGROUND_IMAGE, filename="background.png")
@@ -456,35 +429,6 @@ async def setup_ticket_panel(interaction: discord.Interaction):
         await channel.send(embed=embed, view=view)
     await interaction.followup.send("✅ פנל הטיקטים המעוצב הוקם בהצלחה!", ephemeral=True)
 
-@bot.tree.command(name="reset_logs", description="מוחק את כל ערוצי הלוגים הישנים ומקים אותם מחדש בצורה נקייה")
-@app_commands.checks.has_permissions(administrator=True)
-async def reset_logs(interaction: discord.Interaction):
-    await interaction.response.defer(ephemeral=True)
-    guild = interaction.guild
-    staff_role = guild.get_role(STAFF_TICKET_ROLE_ID)
-    if not staff_role:
-        return await interaction.followup.send("שגיאה: רול הצוות שצוין לא נמצא בשרת.", ephemeral=True)
-    old_category = discord.utils.get(guild.categories, name="LOGS")
-    if old_category:
-        for channel in old_category.text_channels:
-            try:
-                await channel.delete()
-            except Exception:
-                pass
-        try:
-            await old_category.delete()
-        except Exception:
-            pass
-    overwrites = {
-        guild.default_role: discord.PermissionOverwrite(view_channel=False),
-        staff_role: discord.PermissionOverwrite(view_channel=True, send_messages=False)
-    }
-    new_category = await guild.create_category(name="LOGS", overwrites=overwrites)
-    created_count = 0
-    for ch_name in LOG_CHANNELS:
-        await guild.create_text_channel(name=ch_name, category=new_category)
-        created_count += 1
-    await interaction.followup.send(f"🧹 קטגוריית LOGS הוקמה מחדש מאפס עם {created_count} חדרים.", ephemeral=True)
 # ==========================================
 # 📊 משימה אוטומטית ברקע - פנייה ישירה ל-FiveM (מתחלף כל 30 שניות)
 # ==========================================
@@ -492,8 +436,7 @@ async def reset_logs(interaction: discord.Interaction):
 async def track_fivem_status():
     global status_cycle
     guild = bot.get_guild(GUILD_ID)
-    if not guild: 
-        return
+    if not guild: return
     players_count, max_players, server_online = 0, 5, False
     try:
         url = f"http://{SERVER_IP}:{SERVER_PORT}/players.json"
@@ -510,6 +453,7 @@ async def track_fivem_status():
             max_players = int(json.loads(info_response.read().decode()).get('sv_maxclients', 5))
     except Exception:
         pass
+        
     if status_cycle == 0:
         status_text = f"{players_count}/{max_players} שחקנים" if server_online else "0/5"
         status_cycle = 1
@@ -535,18 +479,25 @@ async def on_ready():
     print("------")
     bot.add_view(RoleRequestStarterView())
     bot.add_view(TicketStarterView())
+    
     if not track_fivem_status.is_running():
         track_fivem_status.start()
+        
     try:
+        # 🎯 ניקוי מוחלט של כל הפקודות הגלובליות הישנות שדיסקורד שומר בזיכרון המטמון
+        bot.tree.clear_commands(guild=None)
+        await bot.tree.sync(guild=None)
+        print("🧹 Cleared all old global slash commands successfully.")
+        
+        # 🎯 סנכרון של הפקודות המשטרתיות החדשות והספציפיות לשרת שלכם בלבד
         guild_obj = discord.Object(id=GUILD_ID)
         bot.tree.copy_global_to(guild=guild_obj)
         await bot.tree.sync(guild=guild_obj)
-        print(f"🎯 Synced slash commands for Police Bot successfully.")
+        print(f"🎯 Synced official slash commands for Police Bot successfully.")
     except Exception as e:
         print(f"Failed to sync slash commands: {e}")
 
 if __name__ == "__main__":
     t = Thread(target=run_flask)
     t.start()
-    if TOKEN: 
-        bot.run(TOKEN)
+    if TOKEN: bot.run(TOKEN)

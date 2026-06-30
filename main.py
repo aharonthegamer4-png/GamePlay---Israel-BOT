@@ -31,7 +31,7 @@ ROLE_PANEL_CHANNEL_ID = 1500997767256870923
 ROLE_APPROVAL_LOG_CHANNEL_ID = 1521554909021868073
 TICKET_PANEL_CHANNEL_ID = 1521555870268260423
 TICKET_LOG_CHANNEL_ID = 1521557178387795999
-ROLE_GIVEN_LOG_CHANNEL_ID = 1521575503448768683 # 🎯 חדר לוג נתינת רולים החדש שביקשת!
+ROLE_GIVEN_LOG_CHANNEL_ID = 1521575503448768683
 
 # משתנה גלובלי לשמירת מצב הלולאה (0 = שחקנים, 1 = סטטוס אונליין/אופליין)
 status_cycle = 0
@@ -168,11 +168,11 @@ class DynamicRoleSelect(discord.ui.Select):
 
         roles_list = ", ".join(added_roles)
         
-        # 🔒 שלב 1: נעילת הודעת הפנל המקורית על ידי מחיקת הכפתורים והתפריט לחלוטין כדי למנוע לחיצות נוספות
-        old_embed = interaction.message.embeds[0]
+        # 🔒 שלב 1: נעילת הודעת הפנל המקורית על ידי מחיקת הכפתורים והתפריט לחלוטין
+        old_embed = interaction.message.embeds
         locked_embed = discord.Embed(
             title="🔒 פניית בקשת רולים טופלה וננעלה",
-            description=old_embed.description,
+            description=old_embed[0].description if old_embed else "טופס בקשת דרגות",
             color=discord.Color.green()
         )
         if os.path.exists(BACKGROUND_IMAGE):
@@ -183,7 +183,7 @@ class DynamicRoleSelect(discord.ui.Select):
         locked_embed.add_field(name="👤 המשתמש שקיבל", value=target.mention, inline=True)
         await interaction.message.edit(embed=locked_embed, view=None)
 
-        # 📄 שלב 2: שליחת הלוג החדש, המפורט והמעוצב לחדר הלוגים שביקשת!
+        # 📄 שלב 2: שליחת הלוג לחדר החדש שציינת
         log_channel = guild.get_channel(ROLE_GIVEN_LOG_CHANNEL_ID)
         if log_channel:
             given_embed = discord.Embed(
@@ -252,17 +252,13 @@ class RoleApprovalView(discord.ui.View):
     @discord.ui.button(label="סיום פנייה ונתינת רולים", style=discord.ButtonStyle.success, emoji="✅", custom_id="admin_action_finish")
     async def finish_request(self, interaction: discord.Interaction, button: discord.ui.Button):
         guild = interaction.guild
-        target = guild.get_member(self.target_user_id)
-        
         old_embed = interaction.message.embeds
         locked_embed = discord.Embed(
             title="🔒 פניית בקשת רולים נסגרה ידנית",
-            description=old_embed.description,
+            description=old_embed[0].description if old_embed else "טופס בקשת דרגות",
             color=discord.Color.green()
         )
         if os.path.exists(BACKGROUND_IMAGE): locked_embed.set_image(url="attachment://background.png")
-            
-        target_mention = target.mention if target else f"`{self.target_user_id}`"
         locked_embed.add_field(name="🛡️ סטטוס פנייה", value=f"✅ נסגר ידנית על ידי {interaction.user.mention}!", inline=False)
         
         await interaction.message.edit(embed=locked_embed, view=None)
@@ -301,7 +297,7 @@ class TicketActionButtons(discord.ui.View):
     @discord.ui.button(label="שינוי שם חדר", style=discord.ButtonStyle.primary, emoji="✏️", custom_id="ticket_rename")
     async def rename_ticket(self, interaction: discord.Interaction, button: discord.ui.Button):
         class RenameModal(discord.ui.Modal, title="שינוי שם חדר הטיקט"):
-            new_name = discord.ui.TextInput(label="השם החדש של החדר", placeholder="לדוגמה: בטיפול-אהרון", required=True)
+            new_name = discord.ui.TextInput(label="השם החדש של החדר", placeholder="בטיפול-אהרון", required=True)
             async def on_submit(self, inter: discord.Interaction):
                 await inter.response.defer(ephemeral=True)
                 await inter.channel.edit(name=self.new_name.value)
@@ -315,8 +311,8 @@ class TicketActionButtons(discord.ui.View):
         try:
             msg = await bot.wait_for('message', check=check, timeout=30.0)
             if msg.mentions:
-                await interaction.channel.set_permissions(msg.mentions, view_channel=True, send_messages=True)
-                await interaction.channel.send(f"✅ המשתמש {msg.mentions.mention} נוסף בהצלחה לשיחת הטיקט על ידי {interaction.user.mention}!")
+                await interaction.channel.set_permissions(msg.mentions[0], view_channel=True, send_messages=True)
+                await interaction.channel.send(f"✅ המשתמש {msg.mentions[0].mention} נוסף בהצלחה לשיחת הטיקט!")
         except asyncio.TimeoutError:
             await interaction.channel.send("❌ עבר הזמן המוקצב להוספת משתמש. אנא לחץ שוב.")
 
@@ -364,7 +360,7 @@ class TicketDropdown(discord.ui.Select):
 
     async def callback(self, interaction: discord.Interaction):
         guild = interaction.guild
-        ticket_type = self.values
+        ticket_type = self.values[0] # 🎯 תיקון קריטי: לוקח את הערך הראשון מתוך רשימת הבחירה למניעת קריסות אינטראקציה
         
         overwrites = {guild.default_role: discord.PermissionOverwrite(view_channel=False), interaction.user: discord.PermissionOverwrite(view_channel=True, send_messages=True, attach_files=True)}
         staff_role = guild.get_role(STAFF_TICKET_ROLE_ID)

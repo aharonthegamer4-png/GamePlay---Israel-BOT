@@ -31,7 +31,7 @@ ROLE_PANEL_CHANNEL_ID = 1500997767256870923
 ROLE_APPROVAL_LOG_CHANNEL_ID = 1521554909021868073
 TICKET_PANEL_CHANNEL_ID = 1521555870268260423
 TICKET_LOG_CHANNEL_ID = 1521557178387795999
-ROLE_GIVEN_LOG_CHANNEL_ID = 1521575503448768683
+ROLE_GIVEN_LOG_CHANNEL_ID = 1521575503448768683 # חדר לוג נתינת רולים החדש
 
 # משתנה גלובלי לשמירת מצב הלולאה (0 = שחקנים, 1 = סטטוס אונליין/אופליין)
 status_cycle = 0
@@ -311,8 +311,8 @@ class TicketActionButtons(discord.ui.View):
         try:
             msg = await bot.wait_for('message', check=check, timeout=30.0)
             if msg.mentions:
-                await interaction.channel.set_permissions(msg.mentions[0], view_channel=True, send_messages=True)
-                await interaction.channel.send(f"✅ המשתמש {msg.mentions[0].mention} נוסף בהצלחה לשיחת הטיקט!")
+                await interaction.channel.set_permissions(msg.mentions, view_channel=True, send_messages=True)
+                await interaction.channel.send(f"✅ המשתמש {msg.mentions.mention} נוסף בהצלחה לשיחת הטיקט!")
         except asyncio.TimeoutError:
             await interaction.channel.send("❌ עבר הזמן המוקצב להוספת משתמש. אנא לחץ שוב.")
 
@@ -360,7 +360,7 @@ class TicketDropdown(discord.ui.Select):
 
     async def callback(self, interaction: discord.Interaction):
         guild = interaction.guild
-        ticket_type = self.values[0] # 🎯 תיקון קריטי: לוקח את הערך הראשון מתוך רשימת הבחירה למניעת קריסות אינטראקציה
+        ticket_type = self.values[0] # 🎯 לוקח את הערך הנכון מתוך הבחירה למניעת שגיאות אינטרקציה
         
         overwrites = {guild.default_role: discord.PermissionOverwrite(view_channel=False), interaction.user: discord.PermissionOverwrite(view_channel=True, send_messages=True, attach_files=True)}
         staff_role = guild.get_role(STAFF_TICKET_ROLE_ID)
@@ -425,27 +425,41 @@ async def track_fivem_status():
     global status_cycle
     guild = bot.get_guild(GUILD_ID)
     if not guild: return
-    players_count, max_players, server_online = 0, 5, False
+    
+    players_count = 0
+    max_players = 8
+    server_online = False
+    
+    # משיכת כמות שחקנים חיה מה-IP שלכם
     try:
-        url = f"http://{SERVER_IP}:{SERVER_PORT}/players.json"
-        req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
-        with urllib.request.urlopen(req, timeout=4) as response:
+        url_players = f"http://{SERVER_IP}:{SERVER_PORT}/players.json"
+        req_players = urllib.request.Request(url_players)
+        req_players.add_header('User-Agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36')
+        with urllib.request.urlopen(req_players, timeout=4) as response:
             players_count = len(json.loads(response.read().decode()))
             server_online = True
-    except Exception: server_online = False
+    except Exception:
+        server_online = False
+        
+    # 🎯 משיכת כמות מקומות (Slots) דינמית ומשתנה ישירות מתוך קובץ ההגדרות של השרת שלכם!
     try:
-        info_url = f"http://{SERVER_IP}:{SERVER_PORT}/info.json"
-        info_req = urllib.request.Request(info_url, headers={'User-Agent': 'Mozilla/5.0'})
-        with urllib.request.urlopen(info_req, timeout=4) as info_response:
-            max_players = int(json.loads(info_response.read().decode()).get('sv_maxclients', 5))
-    except Exception: pass
+        url_info = f"http://{SERVER_IP}:{SERVER_PORT}/info.json"
+        req_info = urllib.request.Request(url_info)
+        req_info.add_header('User-Agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36')
+        with urllib.request.urlopen(req_info, timeout=4) as info_response:
+            info_data = json.loads(info_response.read().decode())
+            # קורא את הנתון בזמן אמת, ואם השרת משתנה - הבוט משנה לבד ללא צורך במגע בקוד!
+            max_players = int(info_data.get('Data', {}).get('sv_maxclients', info_data.get('sv_maxclients', 8)))
+    except Exception:
+        pass
         
     if status_cycle == 0:
-        status_text = f"{players_count}/{max_players} שחקנים" if server_online else "0/5"
+        status_text = f"{players_count}/{max_players} שחקנים" if server_online else f"0/{max_players}"
         status_cycle = 1
     else:
         status_text = "Online 🟢" if server_online else "Offline 🔴"
         status_cycle = 0
+        
     await bot.change_presence(activity=discord.Activity(type=discord.ActivityType.watching, name=status_text))
 
 async def setup_dynamic_selects(guild: discord.Guild, view: RoleApprovalView):

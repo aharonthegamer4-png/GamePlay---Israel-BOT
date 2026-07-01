@@ -27,9 +27,9 @@ ROLE_APPROVER_ID = 1521553580148916325 # רול אישור דרגות
 STAFF_TICKET_ROLE_ID = 1521554756626157788 # רול צוות הטיקטים
 SAY_COMMAND_ROLE_ID = 1521602302622961857 # הרול הבלעדי שיכול להשתמש בפקודות ההכרזה
 
-# 🎯 מזהי החדרים הרשמיים והמדויקים של השרת - כולל חדר הסטטוס החדש ששלחת!
+# מזהי החדרים הרשמיים והמדויקים של השרת
 WELCOME_CHANNEL_ID = 1500997767256870922
-FIVEM_STATUS_CHANNEL_ID = 1500997767256870925 # 🎯 חדר סטטוס שחקנים בלייב המעודכן שלך!
+FIVEM_STATUS_CHANNEL_ID = 1500997767256870925 # חדר סטטוס שחקנים בלייב המעודכן שלך!
 SAY_PANEL_CHANNEL_ID = 1521623331990933544     # חדר פנל סיי (say-פנל)
 ROLE_PANEL_CHANNEL_ID = 1500997767256870923    # חדר פנל בקשת רולים
 TICKET_PANEL_CHANNEL_ID = 1521555870268260423  # חדר פנל פתיחת טיקטים
@@ -285,12 +285,13 @@ class TicketActionButtons(discord.ui.View):
             msg = await bot.wait_for('message', check=check, timeout=30.0)
             target = None
             if msg.mentions: 
-                target = msg.mentions[0]
+                target = msg.mentions
             else:
                 m = re.search(r'\d+', msg.content)
                 if m: target = interaction.guild.get_member(int(m.group()))
                 
             if target:
+                await interaction.channel.set_permissions(target, view_channel=True, send_messages=True, attach_files=True)
                 await interaction.channel.set_permissions(target, view_channel=True, send_messages=True, attach_files=True)
                 await interaction.channel.send(f"✅ המשתמש {target.mention} נוסף בהצלחה לטיקט על ידי {interaction.user.mention}!")
                 try: await msg.delete()
@@ -377,7 +378,7 @@ async def setup_say_panel_cmd(ctx):
 async def setup_role_panel_cmd(ctx):
     target_channel = ctx.guild.get_channel(ROLE_PANEL_CHANNEL_ID)
     if not target_channel: return
-    embed = discord.Embed(title="🎖️ מחלקת משטרת GamePlay-IL | בקשת דרגות ורולים", description="לחצו על הכפתור למטה ומלאו את הפרטים במדויק.", color=0x1a73e8)
+    embed = discord.Embed(title="🎖️ מחלקת משטרת GamePlay-IL | בקשת דרגות ורולים", description="לחצו על הכפתור למטה ומלאו את ...", color=0x1a73e8)
     embed.set_footer(text="Developed by Aharon the gamer")
     if os.path.exists(BACKGROUND_IMAGE): embed.set_image(url="attachment://background.png")
     view = RoleRequestStarterView()
@@ -532,6 +533,7 @@ async def on_guild_role_create(role: discord.Role):
             break
     except: pass
     embed = discord.Embed(title="✨ רול חדש נוצר בשרת", description=f"**שם הרול:** {role.mention}\n**נוצר על ידי:** {responsible_staff}", color=discord.Color.blue())
+    embed.set_footer(text="Developed by Aharon the gamer")
     await log.send(embed=embed)
 
 @bot.event
@@ -546,6 +548,7 @@ async def on_guild_role_delete(role: discord.Role):
             break
     except: pass
     embed = discord.Embed(title="🗑️ רול נמחק מהשרת", description=f"**שם הרול שנמחק:** `{role.name}`\n**נמחק על ידי:** {responsible_staff}", color=discord.Color.dark_red())
+    embed.set_footer(text="Developed by Aharon the gamer")
     await log.send(embed=embed)
 
 # 🎯 📝 מערכת תיעוד הפקודות הרשמית (Command Logger)!
@@ -556,32 +559,47 @@ async def on_command(ctx):
     embed = discord.Embed(title="🚨 פקודת בוט הורצה בשרת", description=f"**חבר הצוות:** {ctx.author.mention} (`{ctx.author.id}`)\n**הפקודה שהורצה:** `{ctx.message.content}`\n**באפיק השיחה:** {ctx.channel.mention}", color=0x1a73e8)
     embed.set_footer(text="Command Logger System")
     await log_chan.send(embed=embed)
-# ==========================================
-# 📊 משימה אוטומטית ברקע - פנייה ל-FiveM ועריכת הודעה קבועה בלייב!
-# ==========================================
+class QuickConnectButton(discord.ui.View):
+    def __init__(self):
+        super().__init__(timeout=None)
+        # כפתור קישור אינטראקטיבי מיוחד לפתיחה וכניסה מהירה ל-FiveM בשנייה!
+        url = f"fivem://connect/{SERVER_IP}:{SERVER_PORT}"
+        self.add_item(discord.ui.Button(label="כניסה מהירה לשרת 🚓", url=url, style=discord.ButtonStyle.link))
+
 @tasks.loop(seconds=10)
 async def track_fivem_status():
     global status_cycle, status_message_id
     guild = bot.get_guild(GUILD_ID)
     if not guild: return
     
-    # 🎯 נעילה הרמטית ומדויקת לחדר הסטטוס ששלחת לי בקישור האחרון!
     status_channel = guild.get_channel(FIVEM_STATUS_CHANNEL_ID)
     if not status_channel: return
 
     players_count, max_players, server_online = 0, 64, False
     players_list = []
     
+    # 🎯 ניסיון קריאה מתקדם: בודק עם פורט ובלי פורט כדי להבטיח קריאה יציבה ב-100%
     try:
         url_players = f"http://{SERVER_IP}:{SERVER_PORT}/players.json"
         req_players = urllib.request.Request(url_players, headers={'User-Agent': 'Mozilla/5.0'})
-        with urllib.request.urlopen(req_players, timeout=4) as response:
+        with urllib.request.urlopen(req_players, timeout=3) as response:
             data = json.loads(response.read().decode())
             players_count = len(data)
             server_online = True
             for p in data:
                 players_list.append(f"• `{p.get('name', 'Unknown')}` (ID: {p.get('id', '0')})")
-    except: server_online = False
+    except:
+        # ניסיון שני ללא פורט (במידה והשרת מוגן ב-Proxy)
+        try:
+            url_players = f"http://{SERVER_IP}/players.json"
+            req_players = urllib.request.Request(url_players, headers={'User-Agent': 'Mozilla/5.0'})
+            with urllib.request.urlopen(req_players, timeout=3) as response:
+                data = json.loads(response.read().decode())
+                players_count = len(data)
+                server_online = True
+                for p in data:
+                    players_list.append(f"• `{p.get('name', 'Unknown')}` (ID: {p.get('id', '0')})")
+        except: server_online = False
 
     status_title = "GamePlay-IL | Israeli RolePlay"
     embed = discord.Embed(title=status_title, color=0x1a73e8)
@@ -597,10 +615,9 @@ async def track_fivem_status():
     if len(joined_players) > 1024: joined_players = joined_players[:1000] + "\n...ועוד שחקנים"
     
     embed.add_field(name="📡 שחקנים מחוברים", value=joined_players, inline=False)
-    embed.set_footer(text=f"Last update: המתעדכן בכל 10 שניות קבוע")
+    embed.set_footer(text="Developed by Aharon the gamer") # 🎯 חתימה באנגלית כמו בשאר המערכות
     if os.path.exists(BACKGROUND_IMAGE): embed.set_image(url="attachment://background.png")
 
-    # 🎯 תיקון המחיקות: מחפש הודעה קיימת ועורך אותה שקט ללא תיוגים!
     if status_message_id is None:
         async for msg in status_channel.history(limit=20):
             if msg.author.id == bot.user.id and msg.embeds and msg.embeds.title == status_title:
@@ -610,16 +627,16 @@ async def track_fivem_status():
     if status_message_id:
         try:
             msg = await status_channel.fetch_message(status_message_id)
-            await msg.edit(embed=embed)
+            await msg.edit(embed=embed, view=QuickConnectButton())
         except:
             if os.path.exists(BACKGROUND_IMAGE):
-                new_msg = await status_channel.send(file=discord.File(BACKGROUND_IMAGE, filename="background.png"), embed=embed)
-            else: new_msg = await status_channel.send(embed=embed)
+                new_msg = await status_channel.send(file=discord.File(BACKGROUND_IMAGE, filename="background.png"), embed=embed, view=QuickConnectButton())
+            else: new_msg = await status_channel.send(embed=embed, view=QuickConnectButton())
             status_message_id = new_msg.id
     else:
         if os.path.exists(BACKGROUND_IMAGE):
-            new_msg = await status_channel.send(file=discord.File(BACKGROUND_IMAGE, filename="background.png"), embed=embed)
-        else: new_msg = await status_channel.send(embed=embed)
+            new_msg = await status_channel.send(file=discord.File(BACKGROUND_IMAGE, filename="background.png"), embed=embed, view=QuickConnectButton())
+        else: new_msg = await status_channel.send(embed=embed, view=QuickConnectButton())
         status_message_id = new_msg.id
 
     if status_cycle == 0:

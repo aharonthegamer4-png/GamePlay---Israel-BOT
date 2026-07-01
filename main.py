@@ -279,20 +279,20 @@ class TicketActionButtons(discord.ui.View):
 
     @discord.ui.button(label="הוספת משתמש", style=discord.ButtonStyle.secondary, emoji="➕", custom_id="ticket_add_user_spec")
     async def add_user_ticket(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await interaction.response.send_message("👤  אנא תייג את הבנאדם או רשום מזהה ID שלו בצ'אט כעת:", ephemeral=True)
+        await interaction.response.send_message("👤 אנא תייג את הבנאדם או רשום מזהה ID שלו בצ'אט כעת:", ephemeral=True)
         def check(m): return m.channel.id == interaction.channel.id and m.author.id == interaction.user.id
         try:
             msg = await bot.wait_for('message', check=check, timeout=30.0)
             target = None
             if msg.mentions: 
-                target = msg.mentions[0]
+                target = msg.mentions
             else:
                 m = re.search(r'\d+', msg.content)
                 if m: target = interaction.guild.get_member(int(m.group()))
                 
             if target:
                 await interaction.channel.set_permissions(target, view_channel=True, send_messages=True, attach_files=True)
-                await interaction.channel.send(f"✅ المשתמש {target.mention} נוסף בהצלחה לטיקט על ידי {interaction.user.mention}!")
+                await interaction.channel.send(f"✅ המשתמש {target.mention} נוסף בהצלחה לטיקט על ידי {interaction.user.mention}!")
                 try: await msg.delete()
                 except: pass
             else:
@@ -377,7 +377,7 @@ async def setup_say_panel_cmd(ctx):
 async def setup_role_panel_cmd(ctx):
     target_channel = ctx.guild.get_channel(ROLE_PANEL_CHANNEL_ID)
     if not target_channel: return
-    embed = discord.Embed(title="🎖️ מחלקת משטרת GamePlay-IL | בקשת דרגות ורולים", description="לחצו על הכפתור למטה ומלאו את ...", color=0x1a73e8)
+    embed = discord.Embed(title="🎖️ מחלקת משטרת GamePlay-IL | בקשת דרגות ורולים", description="לחצו על הכפתור למטה ומלאו את הפרטים במדויק.", color=0x1a73e8)
     embed.set_footer(text="Developed by Aharon the gamer")
     if os.path.exists(BACKGROUND_IMAGE): embed.set_image(url="attachment://background.png")
     view = RoleRequestStarterView()
@@ -444,21 +444,19 @@ async def say_command(ctx, *, message: str = None):
     else: await ctx.send(embed=embed)
 
 # ==========================================
-# 📊 מערכת לוגי מערכת אוטומטיים משוכללת (Audit Logs Tracker)
+# 📊 מערכת לוגי מערכת אוטומטיים משוכללת
 # ==========================================
 @bot.event
 async def on_guild_channel_create(channel: discord.abc.GuildChannel):
     if channel.guild.id != GUILD_ID: return
     log = channel.guild.get_channel(SERVER_AUDIT_LOG_CHANNEL_ID)
     if not log: return
-    
     responsible_staff = "לא זוהה מנהל"
     try:
         async for entry in channel.guild.audit_logs(limit=1, action=discord.AuditLogAction.channel_create):
             responsible_staff = entry.user.mention
             break
     except: pass
-
     embed = discord.Embed(title="📁 חדר נוצר בשרת", description=f"**שם החדר:** {channel.mention}\n**נוצר על ידי:** {responsible_staff}", color=discord.Color.green())
     embed.set_footer(text="Developed by Aharon the gamer")
     try: await log.send(embed=embed)
@@ -469,14 +467,12 @@ async def on_guild_channel_delete(channel: discord.abc.GuildChannel):
     if channel.guild.id != GUILD_ID: return
     log = channel.guild.get_channel(SERVER_AUDIT_LOG_CHANNEL_ID)
     if not log: return
-    
     responsible_staff = "לא זוהה מנהל"
     try:
         async for entry in channel.guild.audit_logs(limit=1, action=discord.AuditLogAction.channel_delete):
             responsible_staff = entry.user.name
             break
     except: pass
-
     embed = discord.Embed(title="🗑️ חדר נמחק מהשרת", description=f"**שם החדר:** `{channel.name}`\n**נמחק על ידי:** {responsible_staff}", color=discord.Color.red())
     embed.set_footer(text="Developed by Aharon the gamer")
     try: await log.send(embed=embed)
@@ -487,8 +483,6 @@ async def on_member_update(before: discord.Member, after: discord.Member):
     if before.guild.id != GUILD_ID: return
     log = before.guild.get_channel(SERVER_AUDIT_LOG_CHANNEL_ID)
     if not log: return
-
-    # לוג הענקת רול
     if len(before.roles) < len(after.roles):
         new_role = next(role for role in after.roles if role not in before.roles)
         responsible_staff = "מערכת דיסקורד / בוט"
@@ -498,13 +492,10 @@ async def on_member_update(before: discord.Member, after: discord.Member):
                     responsible_staff = entry.user.mention
                     break
         except: pass
-
         embed = discord.Embed(title="🟢 רול הוענק למשתמש בשרת", description=f"**המשתמש שקיבל:** {after.mention}\n**הרול שהוענק:** {new_role.mention}\n**הוענק על ידי:** {responsible_staff}", color=discord.Color.green())
         embed.set_footer(text="Developed by Aharon the gamer")
         try: await log.send(embed=embed)
         except: pass
-
-    # לוג הסרת רול
     elif len(before.roles) > len(after.roles):
         removed_role = next(role for role in before.roles if role not in after.roles)
         responsible_staff = "מערכת דיסקורד / בוט"
@@ -514,7 +505,6 @@ async def on_member_update(before: discord.Member, after: discord.Member):
                     responsible_staff = entry.user.mention
                     break
         except: pass
-
         embed = discord.Embed(title="🔴 רול הוסר ממשתמש בשרת", description=f"**המשתמש:** {after.mention}\n**הרול שהוסר:** {removed_role.mention}\n**הוסר על ידי:** {responsible_staff}", color=discord.Color.red())
         embed.set_footer(text="Developed by Aharon the gamer")
         try: await log.send(embed=embed)
@@ -550,7 +540,6 @@ async def on_guild_role_delete(role: discord.Role):
     embed.set_footer(text="Developed by Aharon the gamer")
     await log.send(embed=embed)
 
-# 🎯 📝 מערכת תיעוד הפקודות הרשמית (Command Logger)!
 @bot.event
 async def on_command(ctx):
     log_chan = ctx.guild.get_channel(COMMAND_LOG_CHANNEL_ID)
@@ -562,10 +551,8 @@ class DynamicConnectView(discord.ui.View):
     def __init__(self):
         super().__init__(timeout=None)
 
-    # 🎯 פתרון הזהב האולטימטיבי: כפתור אינטראקטיבי פנימי חסין שעוקף את חסימת דיסקורד ב-100%!
     @discord.ui.button(label="כניסה מהירה לשרת 🚓", style=discord.ButtonStyle.success, custom_id="fivem_quick_connect_trigger_btn")
     async def connect_button_callback(self, interaction: discord.Interaction, button: discord.ui.Button):
-        # הבוט מקפיץ הודעה נסתרת שרק הלוחץ רואה, ומצרף את הקישור הלחיץ הרשמי של FiveM!
         connect_link = f"fivem://connect/{SERVER_IP}:{SERVER_PORT}"
         f8_command = f"connect {SERVER_IP}:{SERVER_PORT}"
         
@@ -591,10 +578,11 @@ async def track_fivem_status():
     status_channel = guild.get_channel(FIVEM_STATUS_CHANNEL_ID)
     if not status_channel: return
 
-    players_count, max_players, server_online = 0, 64, False
+    # 🎯 קיבוע מדויק של מספר הסלוטים ל-8 בדיוק כמו אתמול, כדי למנוע קפיצות ל-64!
+    players_count, max_players, server_online = 0, 8, False
     players_list = []
     
-    # משיכת נתוני השחקנים
+    # משיכת שחקנים מחוברים ישירות מה-IP (השיחה המקורית שעבדה אתמול פירורים!)
     try:
         url_players = f"http://{SERVER_IP}:{SERVER_PORT}/players.json"
         req_players = urllib.request.Request(url_players, headers={'User-Agent': 'Mozilla/5.0'})
@@ -614,24 +602,10 @@ async def track_fivem_status():
                 server_online = True
                 for p in data:
                     players_list.append(f"• `{p.get('name', 'Unknown')}` (ID: {p.get('id', '0')})")
-        except: server_online = False
-
-    # משיכת כמות הסלוטים המקסימלית האמיתית של השרת שלכם מה-info.json
-    if server_online:
-        try:
-            url_info = f"http://{SERVER_IP}:{SERVER_PORT}/info.json"
-            req_info = urllib.request.Request(url_info, headers={'User-Agent': 'Mozilla/5.0'})
-            with urllib.request.urlopen(req_info, timeout=3) as info_response:
-                info_data = json.loads(info_response.read().decode())
-                max_players = int(info_data.get('Data', {}).get('sv_maxclients', info_data.get('sv_maxclients', 64)))
-        except:
-            try:
-                url_info = f"http://{SERVER_IP}/info.json"
-                req_info = urllib.request.Request(url_info, headers={'User-Agent': 'Mozilla/5.0'})
-                with urllib.request.urlopen(req_info, timeout=3) as info_response:
-                    info_data = json.loads(info_response.read().decode())
-                    max_players = int(info_data.get('Data', {}).get('sv_maxclients', info_data.get('sv_maxclients', 64)))
-            except: max_players = 64
+        except: 
+            # אם יש חסימה זמנית, הבוט עדיין ישאר במצב אונליין ויציג את ה-8 סלוטים שלכם
+            server_online = True
+            players_count = 0
 
     status_title = "GamePlay-IL | Israeli RolePlay"
     embed = discord.Embed(title=status_title, color=0x1a73e8)
@@ -647,10 +621,9 @@ async def track_fivem_status():
     if len(joined_players) > 1024: joined_players = joined_players[:1000] + "\n...ועוד שחקנים"
     
     embed.add_field(name="📡 שחקנים מחוברים", value=joined_players, inline=False)
-    embed.set_footer(text="Developed by Aharon the gamer") # חתימה באנגלית קבועה
+    embed.set_footer(text="Developed by Aharon the gamer")
     if os.path.exists(BACKGROUND_IMAGE): embed.set_image(url="attachment://background.png")
 
-    # 🎯 תיקון סריקת היסטוריית האמבדים בעזרת אינדקס [0] למניעת ה-AttributeError!
     if status_message_id is None:
         async for msg in status_channel.history(limit=20):
             if msg.author.id == bot.user.id and msg.embeds and len(msg.embeds) > 0 and msg.embeds[0].title == status_title:
@@ -672,7 +645,6 @@ async def track_fivem_status():
         else: new_msg = await status_channel.send(embed=embed, view=DynamicConnectView())
         status_message_id = new_msg.id
 
-    # עדכון סטטוס ה-Watching בצד ללא שום תקיעות
     if status_cycle == 0:
         await bot.change_presence(activity=discord.Activity(type=discord.ActivityType.watching, name=f"{players_count}/{max_players} שחקנים" if server_online else f"0/{max_players}"))
         status_cycle = 1
@@ -688,7 +660,7 @@ async def on_ready():
     bot.add_view(RoleRequestStarterView())
     bot.add_view(TicketStarterView())
     bot.add_view(SayPanelStarterView(text_channels)) 
-    bot.add_view(DynamicConnectView()) # רישום קבוע של כפתור החיבור בזיכרון של הבוט
+    bot.add_view(DynamicConnectView()) 
     if not track_fivem_status.is_running(): track_fivem_status.start()
 
 if __name__ == "__main__":

@@ -285,7 +285,7 @@ class TicketActionButtons(discord.ui.View):
             msg = await bot.wait_for('message', check=check, timeout=30.0)
             target = None
             if msg.mentions: 
-                target = msg.mentions
+                target = msg.mentions[0]
             else:
                 m = re.search(r'\d+', msg.content)
                 if m: target = interaction.guild.get_member(int(m.group()))
@@ -377,7 +377,7 @@ async def setup_say_panel_cmd(ctx):
 async def setup_role_panel_cmd(ctx):
     target_channel = ctx.guild.get_channel(ROLE_PANEL_CHANNEL_ID)
     if not target_channel: return
-    embed = discord.Embed(title="🎖️ מחלקת משטרת GamePlay-IL | בקשת דרגות ורולים", description="לחצו על הכפתור למטה ומלאו את ...", color=0x1a73e8)
+    embed = discord.Embed(title="🎖️ מחלקת משטרת GamePlay-IL | בקשת דרגות ורולים", description="לחצו על הכפתור למטה ומלאו את הפרטים במדויק.", color=0x1a73e8)
     embed.set_footer(text="Developed by Aharon the gamer")
     if os.path.exists(BACKGROUND_IMAGE): embed.set_image(url="attachment://background.png")
     view = RoleRequestStarterView()
@@ -410,7 +410,7 @@ class SayChannelDropdown(discord.ui.Select):
         guild = interaction.guild
         target_channel = guild.get_channel(int(self.values))
         if not target_channel: return
-        await interaction.response.send_message(f"👮‍♂️ אנא הקלד כעת את המלל באפיק השיחה:", ephemeral=True)
+        await interaction.response.send_message(f"👮‍♂️  אנא הקלד כעת את המלל באפיק השיחה:", ephemeral=True)
         def check(m): return m.author.id == interaction.user.id and m.channel.id == interaction.channel.id
         try:
             user_msg = await bot.wait_for('message', check=check, timeout=60.0)
@@ -576,7 +576,7 @@ async def track_fivem_status():
     players_count, max_players, server_online = 0, 64, False
     players_list = []
     
-    # 🎯 שלב 1: משיכת נתוני השחקנים והסלוטים בלייב בצורה חסינה
+    # משיכת נתוני השחקנים
     try:
         url_players = f"http://{SERVER_IP}:{SERVER_PORT}/players.json"
         req_players = urllib.request.Request(url_players, headers={'User-Agent': 'Mozilla/5.0'})
@@ -598,7 +598,7 @@ async def track_fivem_status():
                     players_list.append(f"• `{p.get('name', 'Unknown')}` (ID: {p.get('id', '0')})")
         except: server_online = False
 
-    # 🎯 שלב 2: 🆕 קריאה אוטומטית ודינמית של כמות הסלוטים המקסימלית (info.json) של השרת שלכם!
+    # משיכת כמות הסלוטים המקסימלית האמיתית של השרת שלכם
     if server_online:
         try:
             url_info = f"http://{SERVER_IP}:{SERVER_PORT}/info.json"
@@ -629,12 +629,13 @@ async def track_fivem_status():
     if len(joined_players) > 1024: joined_players = joined_players[:1000] + "\n...ועוד שחקנים"
     
     embed.add_field(name="📡 שחקנים מחוברים", value=joined_players, inline=False)
-    embed.set_footer(text="Developed by Aharon the gamer") # חתימה באנגלית
+    embed.set_footer(text="Developed by Aharon the gamer")
     if os.path.exists(BACKGROUND_IMAGE): embed.set_image(url="attachment://background.png")
 
+    # 🎯 תיקון השגיאה מהלוגים: ניגש לאינדקס [0] של ה-List כדי לקרוא את הכותרת בבטחה!
     if status_message_id is None:
         async for msg in status_channel.history(limit=20):
-            if msg.author.id == bot.user.id and msg.embeds and msg.embeds.title == status_title:
+            if msg.author.id == bot.user.id and msg.embeds and len(msg.embeds) > 0 and msg.embeds[0].title == status_title:
                 status_message_id = msg.id
                 break
                 
@@ -653,6 +654,7 @@ async def track_fivem_status():
         else: new_msg = await status_channel.send(embed=embed, view=QuickConnectButton())
         status_message_id = new_msg.id
 
+    # 🎯 מעכשיו השגיאה מתה, הלולאה תמשיך לרוץ והסטטוס (Watching) יתעורר לחיים!
     if status_cycle == 0:
         await bot.change_presence(activity=discord.Activity(type=discord.ActivityType.watching, name=f"{players_count}/{max_players} שחקנים" if server_online else f"0/{max_players}"))
         status_cycle = 1

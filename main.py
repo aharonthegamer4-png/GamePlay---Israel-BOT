@@ -27,17 +27,22 @@ ROLE_APPROVER_ID = 1521553580148916325 # רול אישור דרגות
 STAFF_TICKET_ROLE_ID = 1521554756626157788 # רול צוות הטיקטים
 SAY_COMMAND_ROLE_ID = 1521602302622961857 # הרול הבלעדי שיכול להשתמש בפקודות ההכרזה
 
-# 🎯 מזהי החדרים המדויקים והרשמיים ששלחת מהקישורים - נעולים ללא שום בלבול!
+# 🎯 מזהי החדרים הרשמיים והמדויקים של השרת - כולל חדר הסטטוס החדש ששלחת!
 WELCOME_CHANNEL_ID = 1500997767256870922
+FIVEM_STATUS_CHANNEL_ID = 1500997767256870925 # 🎯 חדר סטטוס שחקנים בלייב המעודכן שלך!
 SAY_PANEL_CHANNEL_ID = 1521623331990933544     # חדר פנל סיי (say-פנל)
 ROLE_PANEL_CHANNEL_ID = 1500997767256870923    # חדר פנל בקשת רולים
 TICKET_PANEL_CHANNEL_ID = 1521555870268260423  # חדר פנל פתיחת טיקטים
 
-# חדרים פנימיים ללוגים ואבטחה (ההפרדה המושלמת לפי הקישורים שלך)
+# חדרים פנימיים ללוגים, אבטחה ותיעוד פקודות
 ROLE_APPROVAL_LOG_CHANNEL_ID = 1521554909021868073
-TICKET_LOG_CHANNEL_ID = 1521557178387795999    # 🎯 לוגי טיקטים (סגירת פניות)
-SERVER_AUDIT_LOG_CHANNEL_ID = 1521596321721487491 # 🎯 לוגי מערכת כלליים (אבטחה וחדרים)
+TICKET_LOG_CHANNEL_ID = 1521557178387795999    # לוגי טיקטים (סגירת פניות)
+SERVER_AUDIT_LOG_CHANNEL_ID = 1521596321721487491 # לוגי מערכת כלליים (אבטחה וחדרים)
 ROLE_GIVEN_LOG_CHANNEL_ID = 1521575503448768683 
+COMMAND_LOG_CHANNEL_ID = 1521847015019909180   # חדר תיעוד פקודות (Command Logger)
+
+# משתנה גלובלי לשמירת מזהה הודעת הסטטוס הקבועה כדי לערוך אותה בלייב
+status_message_id = None
 
 # משתנה גלובלי לשמירת מצב הלולאה (0 = שחקנים, 1 = סטטוס אונליין/אופליין)
 status_cycle = 0
@@ -274,19 +279,26 @@ class TicketActionButtons(discord.ui.View):
 
     @discord.ui.button(label="הוספת משתמש", style=discord.ButtonStyle.secondary, emoji="➕", custom_id="ticket_add_user_spec")
     async def add_user_ticket(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await interaction.response.send_message("👤 אנא תייג או רשום מזהה ID של האדם שברצונך להוסיף לחדר ברגע זה בצ'אט:", ephemeral=True)
+        await interaction.response.send_message("👤 אנא תייג את הבנאדם או רשום מזהה ID שלו בצ'אט כעת:", ephemeral=True)
         def check(m): return m.channel.id == interaction.channel.id and m.author.id == interaction.user.id
         try:
             msg = await bot.wait_for('message', check=check, timeout=30.0)
             target = None
-            if msg.mentions: target = msg.mentions
+            if msg.mentions: 
+                target = msg.mentions[0]
             else:
                 m = re.search(r'\d+', msg.content)
                 if m: target = interaction.guild.get_member(int(m.group()))
+                
             if target:
-                await interaction.channel.set_permissions(target, view_channel=True, send_messages=True)
-                await interaction.channel.send(f"✅ המשתמש {target.mention} נוסף לטיקט!")
-        except: pass
+                await interaction.channel.set_permissions(target, view_channel=True, send_messages=True, attach_files=True)
+                await interaction.channel.send(f"✅ המשתמש {target.mention} נוסף בהצלחה לטיקט על ידי {interaction.user.mention}!")
+                try: await msg.delete()
+                except: pass
+            else:
+                await interaction.channel.send("❌ שגיאה: לא זוהה משתמש תקין בשרת. הפעולה בבוטלה.")
+        except asyncio.TimeoutError:
+            await interaction.channel.send("❌ עבר הזמן המוקצב להוספת משתמש. אנא לחץ שוב.")
 
     @discord.ui.button(label="סגירת הפנייה", style=discord.ButtonStyle.danger, emoji="🔒", custom_id="ticket_close_main_spec")
     async def close_ticket_panel(self, interaction: discord.Interaction, button: discord.ui.Button):
@@ -299,7 +311,6 @@ class TicketActionButtons(discord.ui.View):
                 await inter.response.defer(ephemeral=False)
                 guild = inter.guild
                 
-                # 🎯 ניתוב רשמי ומדויק לחדר הלוגים של הטיקטים ששלחת (1521557178387795999)
                 log_channel = guild.get_channel(TICKET_LOG_CHANNEL_ID)
                 creator = guild.get_member(self.creator_id_val)
 
@@ -433,58 +444,43 @@ async def say_command(ctx, *, message: str = None):
     else: await ctx.send(embed=embed)
 
 # ==========================================
-# 📊 משימה אוטומטית ברקע - פנייה ישירה ל-FiveM
+# 📊 מערכת לוגי מערכת אוטומטיים משוכללת (Audit Logs Tracker)
 # ==========================================
-@tasks.loop(seconds=10)
-async def track_fivem_status():
-    global status_cycle
-    guild = bot.get_guild(GUILD_ID)
-    if not guild: return
-    players_count, max_players, server_online = 0, 8, False
-    try:
-        url_players = f"http://{SERVER_IP}:{SERVER_PORT}/players.json"
-        req_players = urllib.request.Request(url_players, headers={'User-Agent': 'Mozilla/5.0'})
-        with urllib.request.urlopen(req_players, timeout=4) as response:
-            players_count = len(json.loads(response.read().decode()))
-            server_online = True
-    except: pass
-    if status_cycle == 0:
-        await bot.change_presence(activity=discord.Activity(type=discord.ActivityType.watching, name=f"{players_count}/8 שחקנים" if server_online else "0/8"))
-        status_cycle = 1
-    else:
-        await bot.change_presence(activity=discord.Activity(type=discord.ActivityType.watching, name="Online 🟢" if server_online else "Offline 🔴"))
-        status_cycle = 0
-
-# 🎯 🛡️ מערכת לוגי מערכת אוטומטיים - משוגרת הרמטית לחדר הכללי שלך (1521596321721487491)!
 @bot.event
 async def on_guild_channel_create(channel: discord.abc.GuildChannel):
     if channel.guild.id != GUILD_ID: return
     log = channel.guild.get_channel(SERVER_AUDIT_LOG_CHANNEL_ID)
-    if log: 
-        embed = discord.Embed(title="📁 חדר נוצר בשרת", description=f"הערוץ/חדר המכונה {channel.mention} נוצר ברגע זה בשרת המשטרה.", color=discord.Color.green())
-        embed.set_footer(text="Developed by Aharon the gamer")
-        if os.path.exists(BACKGROUND_IMAGE):
-            embed.set_image(url="attachment://background.png")
-            try: await log.send(file=discord.File(BACKGROUND_IMAGE, filename="background.png"), embed=embed)
-            except: pass
-        else:
-            try: await log.send(embed=embed)
-            except: pass
+    if not log: return
+    
+    responsible_staff = "לא זוהה מנהל"
+    try:
+        async for entry in channel.guild.audit_logs(limit=1, action=discord.AuditLogAction.channel_create):
+            responsible_staff = entry.user.mention
+            break
+    except: pass
+
+    embed = discord.Embed(title="📁 חדר נוצר בשרת", description=f"**שם החדר:** {channel.mention}\n**נוצר על ידי:** {responsible_staff}", color=discord.Color.green())
+    embed.set_footer(text="Developed by Aharon the gamer")
+    try: await log.send(embed=embed)
+    except: pass
 
 @bot.event
 async def on_guild_channel_delete(channel: discord.abc.GuildChannel):
     if channel.guild.id != GUILD_ID: return
     log = channel.guild.get_channel(SERVER_AUDIT_LOG_CHANNEL_ID)
-    if log: 
-        embed = discord.Embed(title="🗑️ חדר נמחק מהשרת", description=f"הערוץ/חדר המכונה `{channel.name}` נמחק לצמיתות ממערכות הדיסקורד.", color=discord.Color.red())
-        embed.set_footer(text="Developed by Aharon the gamer")
-        if os.path.exists(BACKGROUND_IMAGE):
-            embed.set_image(url="attachment://background.png")
-            try: await log.send(file=discord.File(BACKGROUND_IMAGE, filename="background.png"), embed=embed)
-            except: pass
-        else:
-            try: await log.send(embed=embed)
-            except: pass
+    if not log: return
+    
+    responsible_staff = "לא זוהה מנהל"
+    try:
+        async for entry in channel.guild.audit_logs(limit=1, action=discord.AuditLogAction.channel_delete):
+            responsible_staff = entry.user.name
+            break
+    except: pass
+
+    embed = discord.Embed(title="🗑️ חדר נמחק מהשרת", description=f"**שם החדר:** `{channel.name}`\n**נמחק על ידי:** {responsible_staff}", color=discord.Color.red())
+    embed.set_footer(text="Developed by Aharon the gamer")
+    try: await log.send(embed=embed)
+    except: pass
 
 @bot.event
 async def on_member_update(before: discord.Member, after: discord.Member):
@@ -495,28 +491,144 @@ async def on_member_update(before: discord.Member, after: discord.Member):
     # לוג הענקת רול
     if len(before.roles) < len(after.roles):
         new_role = next(role for role in after.roles if role not in before.roles)
-        embed = discord.Embed(title="🟢 רול הוענק למשתמש בשרת", description=f"**המשתמש שקיבל:** {after.mention}\n**הרול שהוענק:** {new_role.mention}", color=discord.Color.green())
+        responsible_staff = "מערכת דיסקורד / בוט"
+        try:
+            async for entry in before.guild.audit_logs(limit=1, action=discord.AuditLogAction.member_role_update):
+                if entry.target.id == after.id:
+                    responsible_staff = entry.user.mention
+                    break
+        except: pass
+
+        embed = discord.Embed(title="🟢 רול הוענק למשתמש בשרת", description=f"**המשתמש שקיבל:** {after.mention}\n**הרול שהוענק:** {new_role.mention}\n**הוענק על ידי:** {responsible_staff}", color=discord.Color.green())
         embed.set_footer(text="Developed by Aharon the gamer")
-        if os.path.exists(BACKGROUND_IMAGE):
-            embed.set_image(url="attachment://background.png")
-            try: await log.send(file=discord.File(BACKGROUND_IMAGE, filename="background.png"), embed=embed)
-            except: pass
-        else:
-            try: await log.send(embed=embed)
-            except: pass
+        try: await log.send(embed=embed)
+        except: pass
 
     # לוג הסרת רול
     elif len(before.roles) > len(after.roles):
         removed_role = next(role for role in before.roles if role not in after.roles)
-        embed = discord.Embed(title="🔴 רול הוסר ממשתמש בשרת", description=f"**המשתמש:** {after.mention}\n**הרול שהוסר:** {removed_role.mention}", color=discord.Color.red())
+        responsible_staff = "מערכת דיסקורד / בוט"
+        try:
+            async for entry in before.guild.audit_logs(limit=1, action=discord.AuditLogAction.member_role_update):
+                if entry.target.id == after.id:
+                    responsible_staff = entry.user.mention
+                    break
+        except: pass
+
+        embed = discord.Embed(title="🔴 רול הוסר ממשתמש בשרת", description=f"**המשתמש:** {after.mention}\n**הרול שהוסר:** {removed_role.mention}\n**הוסר על ידי:** {responsible_staff}", color=discord.Color.red())
         embed.set_footer(text="Developed by Aharon the gamer")
+        try: await log.send(embed=embed)
+        except: pass
+
+@bot.event
+async def on_guild_role_create(role: discord.Role):
+    if role.guild.id != GUILD_ID: return
+    log = role.guild.get_channel(SERVER_AUDIT_LOG_CHANNEL_ID)
+    if not log: return
+    responsible_staff = "לא זוהה"
+    try:
+        async for entry in role.guild.audit_logs(limit=1, action=discord.AuditLogAction.role_create):
+            responsible_staff = entry.user.mention
+            break
+    except: pass
+    embed = discord.Embed(title="✨ רול חדש נוצר בשרת", description=f"**שם הרול:** {role.mention}\n**נוצר על ידי:** {responsible_staff}", color=discord.Color.blue())
+    await log.send(embed=embed)
+
+@bot.event
+async def on_guild_role_delete(role: discord.Role):
+    if role.guild.id != GUILD_ID: return
+    log = role.guild.get_channel(SERVER_AUDIT_LOG_CHANNEL_ID)
+    if not log: return
+    responsible_staff = "לא זוהה"
+    try:
+        async for entry in role.guild.audit_logs(limit=1, action=discord.AuditLogAction.role_delete):
+            responsible_staff = entry.user.name
+            break
+    except: pass
+    embed = discord.Embed(title="🗑️ רול נמחק מהשרת", description=f"**שם הרול שנמחק:** `{role.name}`\n**נמחק על ידי:** {responsible_staff}", color=discord.Color.dark_red())
+    await log.send(embed=embed)
+
+# 🎯 📝 מערכת תיעוד הפקודות הרשמית (Command Logger)!
+@bot.event
+async def on_command(ctx):
+    log_chan = ctx.guild.get_channel(COMMAND_LOG_CHANNEL_ID)
+    if not log_chan: return
+    embed = discord.Embed(title="🚨 פקודת בוט הורצה בשרת", description=f"**חבר הצוות:** {ctx.author.mention} (`{ctx.author.id}`)\n**הפקודה שהורצה:** `{ctx.message.content}`\n**באפיק השיחה:** {ctx.channel.mention}", color=0x1a73e8)
+    embed.set_footer(text="Command Logger System")
+    await log_chan.send(embed=embed)
+# ==========================================
+# 📊 משימה אוטומטית ברקע - פנייה ל-FiveM ועריכת הודעה קבועה בלייב!
+# ==========================================
+@tasks.loop(seconds=10)
+async def track_fivem_status():
+    global status_cycle, status_message_id
+    guild = bot.get_guild(GUILD_ID)
+    if not guild: return
+    
+    # 🎯 נעילה הרמטית ומדויקת לחדר הסטטוס ששלחת לי בקישור האחרון!
+    status_channel = guild.get_channel(FIVEM_STATUS_CHANNEL_ID)
+    if not status_channel: return
+
+    players_count, max_players, server_online = 0, 64, False
+    players_list = []
+    
+    try:
+        url_players = f"http://{SERVER_IP}:{SERVER_PORT}/players.json"
+        req_players = urllib.request.Request(url_players, headers={'User-Agent': 'Mozilla/5.0'})
+        with urllib.request.urlopen(req_players, timeout=4) as response:
+            data = json.loads(response.read().decode())
+            players_count = len(data)
+            server_online = True
+            for p in data:
+                players_list.append(f"• `{p.get('name', 'Unknown')}` (ID: {p.get('id', '0')})")
+    except: server_online = False
+
+    status_title = "GamePlay-IL | Israeli RolePlay"
+    embed = discord.Embed(title=status_title, color=0x1a73e8)
+    embed.add_field(name="📑 מערכת רשימת שחקנים", value="​", inline=False)
+    embed.add_field(name="🔹 מצב השרת:", value="🟢 ONLINE" if server_online else "🔴 OFFLINE", inline=True)
+    embed.add_field(name="👥 כמות שחקנים:", value=f"{players_count}/{max_players}", inline=True)
+    
+    percentage = int((players_count / max_players) * 100) if server_online else 0
+    embed.add_field(name="⭐ מקום:", value=f"{percentage}%", inline=True)
+    embed.add_field(name="🌐 חיבור לשרת:", value=f"Connect {SERVER_IP}", inline=False)
+    
+    joined_players = "\n".join(players_list) if players_list else "אין שחקנים מחוברים"
+    if len(joined_players) > 1024: joined_players = joined_players[:1000] + "\n...ועוד שחקנים"
+    
+    embed.add_field(name="📡 שחקנים מחוברים", value=joined_players, inline=False)
+    embed.set_footer(text=f"Last update: המתעדכן בכל 10 שניות קבוע")
+    if os.path.exists(BACKGROUND_IMAGE): embed.set_image(url="attachment://background.png")
+
+    # 🎯 תיקון המחיקות: מחפש הודעה קיימת ועורך אותה שקט ללא תיוגים!
+    if status_message_id is None:
+        async for msg in status_channel.history(limit=20):
+            if msg.author.id == bot.user.id and msg.embeds and msg.embeds.title == status_title:
+                status_message_id = msg.id
+                break
+                
+    if status_message_id:
+        try:
+            msg = await status_channel.fetch_message(status_message_id)
+            await msg.edit(embed=embed)
+        except:
+            if os.path.exists(BACKGROUND_IMAGE):
+                new_msg = await status_channel.send(file=discord.File(BACKGROUND_IMAGE, filename="background.png"), embed=embed)
+            else: new_msg = await status_channel.send(embed=embed)
+            status_message_id = new_msg.id
+    else:
         if os.path.exists(BACKGROUND_IMAGE):
-            embed.set_image(url="attachment://background.png")
-            try: await log.send(file=discord.File(BACKGROUND_IMAGE, filename="background.png"), embed=embed)
-            except: pass
-        else:
-            try: await log.send(embed=embed)
-            except: pass
+            new_msg = await status_channel.send(file=discord.File(BACKGROUND_IMAGE, filename="background.png"), embed=embed)
+        else: new_msg = await status_channel.send(embed=embed)
+        status_message_id = new_msg.id
+
+    if status_cycle == 0:
+        await bot.change_presence(activity=discord.Activity(type=discord.ActivityType.watching, name=f"{players_count}/{max_players} שחקנים" if server_online else "0/64"))
+        status_cycle = 1
+    else:
+        await bot.change_presence(activity=discord.Activity(type=discord.ActivityType.watching, name="Online 🟢" if server_online else "Offline 🔴"))
+        status_cycle = 0
+
 @bot.event
 async def on_ready():
     print(f"✅ Logged in as {bot.user.name}")

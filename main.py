@@ -292,7 +292,6 @@ class TicketActionButtons(discord.ui.View):
                 
             if target:
                 await interaction.channel.set_permissions(target, view_channel=True, send_messages=True, attach_files=True)
-                await interaction.channel.set_permissions(target, view_channel=True, send_messages=True, attach_files=True)
                 await interaction.channel.send(f"✅ המשתמש {target.mention} נוסף בהצלחה לטיקט על ידי {interaction.user.mention}!")
                 try: await msg.delete()
                 except: pass
@@ -562,7 +561,6 @@ async def on_command(ctx):
 class QuickConnectButton(discord.ui.View):
     def __init__(self):
         super().__init__(timeout=None)
-        # כפתור קישור אינטראקטיבי מיוחד לפתיחה וכניסה מהירה ל-FiveM בשנייה!
         url = f"fivem://connect/{SERVER_IP}:{SERVER_PORT}"
         self.add_item(discord.ui.Button(label="כניסה מהירה לשרת 🚓", url=url, style=discord.ButtonStyle.link))
 
@@ -578,7 +576,7 @@ async def track_fivem_status():
     players_count, max_players, server_online = 0, 64, False
     players_list = []
     
-    # 🎯 ניסיון קריאה מתקדם: בודק עם פורט ובלי פורט כדי להבטיח קריאה יציבה ב-100%
+    # 🎯 שלב 1: משיכת נתוני השחקנים והסלוטים בלייב בצורה חסינה
     try:
         url_players = f"http://{SERVER_IP}:{SERVER_PORT}/players.json"
         req_players = urllib.request.Request(url_players, headers={'User-Agent': 'Mozilla/5.0'})
@@ -589,7 +587,6 @@ async def track_fivem_status():
             for p in data:
                 players_list.append(f"• `{p.get('name', 'Unknown')}` (ID: {p.get('id', '0')})")
     except:
-        # ניסיון שני ללא פורט (במידה והשרת מוגן ב-Proxy)
         try:
             url_players = f"http://{SERVER_IP}/players.json"
             req_players = urllib.request.Request(url_players, headers={'User-Agent': 'Mozilla/5.0'})
@@ -601,13 +598,30 @@ async def track_fivem_status():
                     players_list.append(f"• `{p.get('name', 'Unknown')}` (ID: {p.get('id', '0')})")
         except: server_online = False
 
+    # 🎯 שלב 2: 🆕 קריאה אוטומטית ודינמית של כמות הסלוטים המקסימלית (info.json) של השרת שלכם!
+    if server_online:
+        try:
+            url_info = f"http://{SERVER_IP}:{SERVER_PORT}/info.json"
+            req_info = urllib.request.Request(url_info, headers={'User-Agent': 'Mozilla/5.0'})
+            with urllib.request.urlopen(req_info, timeout=3) as info_response:
+                info_data = json.loads(info_response.read().decode())
+                max_players = int(info_data.get('Data', {}).get('sv_maxclients', info_data.get('sv_maxclients', 64)))
+        except:
+            try:
+                url_info = f"http://{SERVER_IP}/info.json"
+                req_info = urllib.request.Request(url_info, headers={'User-Agent': 'Mozilla/5.0'})
+                with urllib.request.urlopen(req_info, timeout=3) as info_response:
+                    info_data = json.loads(info_response.read().decode())
+                    max_players = int(info_data.get('Data', {}).get('sv_maxclients', info_data.get('sv_maxclients', 64)))
+            except: max_players = 64
+
     status_title = "GamePlay-IL | Israeli RolePlay"
     embed = discord.Embed(title=status_title, color=0x1a73e8)
     embed.add_field(name="📑 מערכת רשימת שחקנים", value="​", inline=False)
     embed.add_field(name="🔹 מצב השרת:", value="🟢 ONLINE" if server_online else "🔴 OFFLINE", inline=True)
     embed.add_field(name="👥 כמות שחקנים:", value=f"{players_count}/{max_players}", inline=True)
     
-    percentage = int((players_count / max_players) * 100) if server_online else 0
+    percentage = int((players_count / max_players) * 100) if server_online and max_players > 0 else 0
     embed.add_field(name="⭐ מקום:", value=f"{percentage}%", inline=True)
     embed.add_field(name="🌐 חיבור לשרת:", value=f"Connect {SERVER_IP}", inline=False)
     
@@ -615,7 +629,7 @@ async def track_fivem_status():
     if len(joined_players) > 1024: joined_players = joined_players[:1000] + "\n...ועוד שחקנים"
     
     embed.add_field(name="📡 שחקנים מחוברים", value=joined_players, inline=False)
-    embed.set_footer(text="Developed by Aharon the gamer") # 🎯 חתימה באנגלית כמו בשאר המערכות
+    embed.set_footer(text="Developed by Aharon the gamer") # חתימה באנגלית
     if os.path.exists(BACKGROUND_IMAGE): embed.set_image(url="attachment://background.png")
 
     if status_message_id is None:
@@ -640,7 +654,7 @@ async def track_fivem_status():
         status_message_id = new_msg.id
 
     if status_cycle == 0:
-        await bot.change_presence(activity=discord.Activity(type=discord.ActivityType.watching, name=f"{players_count}/{max_players} שחקנים" if server_online else "0/64"))
+        await bot.change_presence(activity=discord.Activity(type=discord.ActivityType.watching, name=f"{players_count}/{max_players} שחקנים" if server_online else f"0/{max_players}"))
         status_cycle = 1
     else:
         await bot.change_presence(activity=discord.Activity(type=discord.ActivityType.watching, name="Online 🟢" if server_online else "Offline 🔴"))

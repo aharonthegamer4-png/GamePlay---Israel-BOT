@@ -279,7 +279,7 @@ class TicketActionButtons(discord.ui.View):
 
     @discord.ui.button(label="הוספת משתמש", style=discord.ButtonStyle.secondary, emoji="➕", custom_id="ticket_add_user_spec")
     async def add_user_ticket(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await interaction.response.send_message("👤 אנא תייג את הבנאדם או רשום מזהה ID שלו בצ'אט כעת:", ephemeral=True)
+        await interaction.response.send_message("👤  אנא תייג את הבנאדם או רשום מזהה ID שלו בצ'אט כעת:", ephemeral=True)
         def check(m): return m.channel.id == interaction.channel.id and m.author.id == interaction.user.id
         try:
             msg = await bot.wait_for('message', check=check, timeout=30.0)
@@ -292,7 +292,7 @@ class TicketActionButtons(discord.ui.View):
                 
             if target:
                 await interaction.channel.set_permissions(target, view_channel=True, send_messages=True, attach_files=True)
-                await interaction.channel.send(f"✅ המשתמש {target.mention} נוסף בהצלחה לטיקט על ידי {interaction.user.mention}!")
+                await interaction.channel.send(f"✅ المשתמש {target.mention} נוסף בהצלחה לטיקט על ידי {interaction.user.mention}!")
                 try: await msg.delete()
                 except: pass
             else:
@@ -377,7 +377,7 @@ async def setup_say_panel_cmd(ctx):
 async def setup_role_panel_cmd(ctx):
     target_channel = ctx.guild.get_channel(ROLE_PANEL_CHANNEL_ID)
     if not target_channel: return
-    embed = discord.Embed(title="🎖️ מחלקת משטרת GamePlay-IL | בקשת דרגות ורולים", description="לחצו על הכפתור למטה ומלאו את הפרטים במדויק.", color=0x1a73e8)
+    embed = discord.Embed(title="🎖️ מחלקת משטרת GamePlay-IL | בקשת דרגות ורולים", description="לחצו על הכפתור למטה ומלאו את ...", color=0x1a73e8)
     embed.set_footer(text="Developed by Aharon the gamer")
     if os.path.exists(BACKGROUND_IMAGE): embed.set_image(url="attachment://background.png")
     view = RoleRequestStarterView()
@@ -558,11 +558,29 @@ async def on_command(ctx):
     embed = discord.Embed(title="🚨 פקודת בוט הורצה בשרת", description=f"**חבר הצוות:** {ctx.author.mention} (`{ctx.author.id}`)\n**הפקודה שהורצה:** `{ctx.message.content}`\n**באפיק השיחה:** {ctx.channel.mention}", color=0x1a73e8)
     embed.set_footer(text="Command Logger System")
     await log_chan.send(embed=embed)
-class QuickConnectButton(discord.ui.View):
+class DynamicConnectView(discord.ui.View):
     def __init__(self):
         super().__init__(timeout=None)
-        url = f"fivem://connect/{SERVER_IP}:{SERVER_PORT}"
-        self.add_item(discord.ui.Button(label="כניסה מהירה לשרת 🚓", url=url, style=discord.ButtonStyle.link))
+
+    # 🎯 פתרון הזהב האולטימטיבי: כפתור אינטראקטיבי פנימי חסין שעוקף את חסימת דיסקורד ב-100%!
+    @discord.ui.button(label="כניסה מהירה לשרת 🚓", style=discord.ButtonStyle.success, custom_id="fivem_quick_connect_trigger_btn")
+    async def connect_button_callback(self, interaction: discord.Interaction, button: discord.ui.Button):
+        # הבוט מקפיץ הודעה נסתרת שרק הלוחץ רואה, ומצרף את הקישור הלחיץ הרשמי של FiveM!
+        connect_link = f"fivem://connect/{SERVER_IP}:{SERVER_PORT}"
+        f8_command = f"connect {SERVER_IP}:{SERVER_PORT}"
+        
+        embed = discord.Embed(
+            title="🚓 חיבור מהיר למחלקת משטרת GamePlay IL",
+            description=(
+                f"**➔ דרך 1 - כניסה ישירה בלחיצה:**\n"
+                f"לחץ על הקישור הבא והשרת יפתח לך אוטומטית:\n<{connect_link}>\n\n"
+                f"**➔ דרך 2 - כניסה ידנית דרך חלון F8 בתוך המשחק:**\n"
+                f"פתח את ה-FiveM, לחץ על מקש `F8` במקלדת, העתק והדבק את הפקודה הבאה:\n```{f8_command}```"
+            ),
+            color=0x1a73e8
+        )
+        embed.set_footer(text="Developed by Aharon the gamer")
+        await interaction.response.send_message(embed=embed, ephemeral=True)
 
 @tasks.loop(seconds=10)
 async def track_fivem_status():
@@ -598,7 +616,7 @@ async def track_fivem_status():
                     players_list.append(f"• `{p.get('name', 'Unknown')}` (ID: {p.get('id', '0')})")
         except: server_online = False
 
-    # משיכת כמות הסלוטים המקסימלית האמיתית של השרת שלכם
+    # משיכת כמות הסלוטים המקסימלית האמיתית של השרת שלכם מה-info.json
     if server_online:
         try:
             url_info = f"http://{SERVER_IP}:{SERVER_PORT}/info.json"
@@ -629,10 +647,10 @@ async def track_fivem_status():
     if len(joined_players) > 1024: joined_players = joined_players[:1000] + "\n...ועוד שחקנים"
     
     embed.add_field(name="📡 שחקנים מחוברים", value=joined_players, inline=False)
-    embed.set_footer(text="Developed by Aharon the gamer")
+    embed.set_footer(text="Developed by Aharon the gamer") # חתימה באנגלית קבועה
     if os.path.exists(BACKGROUND_IMAGE): embed.set_image(url="attachment://background.png")
 
-    # 🎯 תיקון השגיאה מהלוגים: ניגש לאינדקס [0] של ה-List כדי לקרוא את הכותרת בבטחה!
+    # 🎯 תיקון סריקת היסטוריית האמבדים בעזרת אינדקס [0] למניעת ה-AttributeError!
     if status_message_id is None:
         async for msg in status_channel.history(limit=20):
             if msg.author.id == bot.user.id and msg.embeds and len(msg.embeds) > 0 and msg.embeds[0].title == status_title:
@@ -642,19 +660,19 @@ async def track_fivem_status():
     if status_message_id:
         try:
             msg = await status_channel.fetch_message(status_message_id)
-            await msg.edit(embed=embed, view=QuickConnectButton())
+            await msg.edit(embed=embed, view=DynamicConnectView())
         except:
             if os.path.exists(BACKGROUND_IMAGE):
-                new_msg = await status_channel.send(file=discord.File(BACKGROUND_IMAGE, filename="background.png"), embed=embed, view=QuickConnectButton())
-            else: new_msg = await status_channel.send(embed=embed, view=QuickConnectButton())
+                new_msg = await status_channel.send(file=discord.File(BACKGROUND_IMAGE, filename="background.png"), embed=embed, view=DynamicConnectView())
+            else: new_msg = await status_channel.send(embed=embed, view=DynamicConnectView())
             status_message_id = new_msg.id
     else:
         if os.path.exists(BACKGROUND_IMAGE):
-            new_msg = await status_channel.send(file=discord.File(BACKGROUND_IMAGE, filename="background.png"), embed=embed, view=QuickConnectButton())
-        else: new_msg = await status_channel.send(embed=embed, view=QuickConnectButton())
+            new_msg = await status_channel.send(file=discord.File(BACKGROUND_IMAGE, filename="background.png"), embed=embed, view=DynamicConnectView())
+        else: new_msg = await status_channel.send(embed=embed, view=DynamicConnectView())
         status_message_id = new_msg.id
 
-    # 🎯 מעכשיו השגיאה מתה, הלולאה תמשיך לרוץ והסטטוס (Watching) יתעורר לחיים!
+    # עדכון סטטוס ה-Watching בצד ללא שום תקיעות
     if status_cycle == 0:
         await bot.change_presence(activity=discord.Activity(type=discord.ActivityType.watching, name=f"{players_count}/{max_players} שחקנים" if server_online else f"0/{max_players}"))
         status_cycle = 1
@@ -670,6 +688,7 @@ async def on_ready():
     bot.add_view(RoleRequestStarterView())
     bot.add_view(TicketStarterView())
     bot.add_view(SayPanelStarterView(text_channels)) 
+    bot.add_view(DynamicConnectView()) # רישום קבוע של כפתור החיבור בזיכרון של הבוט
     if not track_fivem_status.is_running(): track_fivem_status.start()
 
 if __name__ == "__main__":
